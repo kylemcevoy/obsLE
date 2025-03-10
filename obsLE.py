@@ -102,7 +102,7 @@ def build_obsLE(beta_ds,
 
 def obsLE_pipeline(n_ens_members,
                    target_da,
-                   mode_path,
+                   mode_df,
                    start_year,
                    end_year,
                    mode_list,
@@ -110,7 +110,8 @@ def obsLE_pipeline(n_ens_members,
                    offset_values,
                    fit_seasonal,
                    block_size,
-                   save_path):
+                   save_path,
+                   mode_path=None):
     """Construct the Observational Large Ensemble (Obs-LE).
     
     Parameters
@@ -121,8 +122,11 @@ def obsLE_pipeline(n_ens_members,
     target_da, xr.DataArray, dims: (time, lat, lon)
         DataArray containing the target variable for building the Obs-LE.
 
-    mode_path: str
-        Path to the directory containing the climate mode files.
+    mode_df: pd.DataFrame
+        DataFrame containing the climate modes as columns. The index should be 
+        a pd.datetime64 index. Rows should contain monthly observations of the
+        climate modes. If None, imports modes using 
+        process_data.process_climate_modes().
 
     start_year: str
         First year to include in the Obs-LE. String with four digit year.
@@ -159,13 +163,17 @@ def obsLE_pipeline(n_ens_members,
         Path to the directory in which to save the outputted Obs-LE members. Should
         end in /. Individual members are saved as netCDF files at:
         save_path + 'obsLE_member{member #}.nc'
+
+    mode_path: str
+        path to the climate modes
     """
-    
-    ortho_mode_df = data_proc.build_ortho_mode_df(mode_path=mode_path,
+
+    ortho_mode_df = data_proc.build_ortho_mode_df(mode_df=mode_df,
                                                   start_year=start_year,
                                                   end_year=end_year,
                                                   mode_list=mode_list,
-                                                  save_path=save_path)
+                                                  save_path=save_path,
+                                                  mode_path=mode_path)
     
     param_ds, llik_ds = optim.optimize_transform(target_da=target_da,
                                                  ortho_mode_df=ortho_mode_df,

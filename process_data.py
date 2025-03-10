@@ -253,32 +253,42 @@ def orthogonalize_modes(mode_df, mode_list=None, save_path=None):
 
     return ortho_modes_df
 
-def build_ortho_mode_df(mode_path,
+def build_ortho_mode_df(mode_df,
                         start_year,
                         end_year,
                         mode_list,
-                        save_path=None):
+                        save_path=None,
+                        mode_path=None):
     """Loads the climate mode files processes the data and outputs a pandas
     DataFrame that contains the orthogonal modes.
 
     Parameters
     ----------
-    mode_path : str
-        path to the directory containing the climate mode files. See process_climate_modes()
-        for the expected files.
+    mode_df: pd.DataFrame
+        DataFrame containing the climate modes as columns. The rows should contain
+        monthly observations of the climate modes. The index should be a 
+        pd.datetime64 index.
+        
     start_year : str/int
         four digit string/int for the first year of data to include
         in the climate mode output. Value should be >= 1920
+        
     end_year : str/int
         four digit string/int for last year of data to include
         in the climate mode output. Value should be <= 2020.
+        
     mode_list : list of str
         the variable names to include in the output DataFrame. 
+        
     save_path : str
         Path to the directory for saving the output. The string should end in / after
         the directory name.
         If None, nothing will be saved. The pd.DataFrame output is converted to an
         xr.DataSet before saving, and is saved at save_path + "ortho_mode.nc".
+        
+    mode_path : str
+        Path to the directory containing the climate mode files. Only used if
+        mode_df=None. See process_climate_modes() for the expected files. 
 
     Returns
     -------
@@ -288,10 +298,11 @@ def build_ortho_mode_df(mode_path,
         (12 * (#years)) by (1 + (# modes)).
     """
     
-    mode_df = process_climate_modes(mode_path=mode_path,
-                                    start_year=start_year,
-                                    end_year=end_year,
-                                    save_path=save_path)
+    if mode_df is None:
+        mode_df = process_climate_modes(mode_path=mode_path,
+                                        start_year=start_year,
+                                        end_year=end_year,
+                                        save_path=save_path)
 
     check_mode(mode_df)
 
