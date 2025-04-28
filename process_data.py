@@ -1,10 +1,14 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
+import cftime
 import warnings
 
 ####### Loading and processing climate modes
-def process_climate_modes(mode_path, start_year='1920', end_year='2020', save_path=None):
+def process_climate_modes(mode_path,
+                          start_year='1920',
+                          end_year='2020',
+                          save_path=None):
     """Process the climate mode files into a single data object
     containing monthly climate mode values.
 
@@ -152,6 +156,51 @@ def process_climate_modes(mode_path, start_year='1920', end_year='2020', save_pa
         mode_ds.to_netcdf(save_path + 'climate_modes.nc')
 
     return mode_df
+
+def process_forcings(forcings_path,
+                     start_year='1920',
+                     end_year='2020',
+                     save_path=None):
+
+    var_fnames = {'ico2_log': 'ico2_log.nc',
+                 'so2': 'so2_em_anthro.nc'}
+    
+    ico2_log = xr.open_dataset(forcings_path + var_fnames['ico2_log'],
+                              decode_times=False)
+
+    # non-standard calendar + units lead to issues with converting to pd.datetime.
+    # so we slice first then replace the index by a datetime64 index that is 
+    # compatible with the other Series after the slicing is complete.
+    ico2_log['time'] = cftime.num2date(ico2_log['time'].values,
+                                       'months since 1600-01-01',
+                                       calendar='360_day')
+
+    ico2_log = ico2_log['log(co2)'].sel(time=slice(start_year, end_year))
+    
+    ico2_log_pd = pd.Series(ico2_log.values, 
+                            index=pd.date_range(start=start_year + '-01-01',
+                                                end=end_year + '-12-01',
+                                                freq='MS'))
+
+    # note that so2 is pre-processed into a data array from input4MIP files.
+    so2 = xr.open_dataarray(forcings_path + var_fnames['so2'])
+
+    so2_pd = pd.Series(so2.values,
+                      index=pd.date_range(start=start_year + '-01-01',
+                                                end=end_year + '-12-01',
+                                                freq='MS'))
+    
+    forcing_df = pd.DataFrame({'ico2_log': ico2_log_pd, 'so2': so2_pd})
+
+    if save_path is not None:
+        forcing_ds = forcing_df.to_xarray()
+        description = ('dataset containing time series of climate forcings for the'
+                      'regression model. Created by processing_forcings() function'
+                      'in data_processing.py')
+        forcing_ds.attrs['description'] = description
+        forcing_ds.to_netcdf(save_path + 'forcings.nc')
+
+    return forcing_df
 
 ###### For sequentially orthogonalizing the climate mode variables. ######
 def gram_schmidt(mode, ortho_basis=None):

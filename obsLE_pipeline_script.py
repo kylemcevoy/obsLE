@@ -3,7 +3,7 @@ import pandas as pd
 import xarray as xr
 
 # Our functions
-import obsLE
+import obsLE.obsLE
 
 ### Climate Mode Parameters
 mode_path = '/home/data/projects/NA_precip_extremes/climate_modes/'

@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 
 #package defined functions
-import process_data as data_proc
+import obsLE.process_data as data_proc
 
 def iaaft(x, fit_seasonal=False, rng=None):
     """Return a surrogate time series based on IAAFT.

@@ -1,10 +1,10 @@
 import numpy as np
 
-import process_data as data_proc
-import transform
-import optimize as optim
-import fit_model as fit
-import resample
+import obsLE.process_data as data_proc
+import obsLE.transform
+import obsLE.optimize as optim
+import obsLE.fit_model as fit
+import obsLE.resample
 
 
 def build_obsLE(beta_ds,
@@ -14,7 +14,8 @@ def build_obsLE(beta_ds,
                 mode_list,
                 lam,
                 offset,
-                save_path):
+                save_path,
+                forcing_df=None):
     """
     Build Observational Large Ensemble (Obs-LE) members from the fitted regression 
     coefficients and the residuals.
@@ -46,6 +47,11 @@ def build_obsLE(beta_ds,
         variable names in beta_ds, and the order should match the order in
         surrogate_modes.
 
+    forcing_df: pd.DataFrame, dims: (n_time, n_forcing_ts)
+        DataFrame containing the forcing time series as columns. Names should match
+        the names in beta_ds and the index should be a pd.datetime64 matching the
+        residuals time coordinate.
+
     lam: xr.DataArray, dims: (month, lat, lon)
         DataArray containing the power paramter, lambda, of the Box-Cox transform.
         Used for transforming the newly generated values back into the original
@@ -70,6 +76,16 @@ def build_obsLE(beta_ds,
     
     mode_index = np.searchsorted(beta_ds.month, residuals_da['time.month'])
 
+    base_mean_field = beta_ds['intercept'][mode_index]
+
+    if forcings_df is not None:
+        forcings_list = forcing_df.columns.to_list()
+
+        for forcing in forcings_list:
+            beta_forcing = beta_ds[forcing]
+            forcing_field = beta_forcing[mode_index].values * forcing_df['forcing']
+            base_mean_field = base_mean_field + forcing_field
+
     for k in range(n_ens):
         bootstrap_residuals = resample.bootstrap_residuals(residuals_da,
                                                            block_size=block_size)
@@ -78,8 +94,8 @@ def build_obsLE(beta_ds,
     
         p = surrogate_mat.shape[1]
         n = surrogate_mat.shape[0]
-    
-        mean_field = beta_ds['intercept'][mode_index]
+
+        mean_field = base_mean_field
     
         for j in range(p):
             surrogate_ts = surrogate_mat[:, j].reshape((n, 1, 1))
@@ -111,6 +127,7 @@ def obsLE_pipeline(n_ens_members,
                    fit_seasonal,
                    block_size,
                    save_path,
+                   forcings_df=None,
                    mode_path=None):
     """Construct the Observational Large Ensemble (Obs-LE).
     
@@ -174,15 +191,20 @@ def obsLE_pipeline(n_ens_members,
                                                   mode_list=mode_list,
                                                   save_path=save_path,
                                                   mode_path=mode_path)
+
+    if forcings_df is not None:
+        X = ortho_mode_df.merge(forcings_df)
+    else:
+        X = ortho_mode_df
     
     param_ds, llik_ds = optim.optimize_transform(target_da=target_da,
-                                                 ortho_mode_df=ortho_mode_df,
+                                                 ortho_mode_df=X,
                                                  lambda_values=lambda_values,
                                                  offset_values=offset_values,
                                                  save_path=save_path)
     
     beta, lm_out = fit.fit_optimized_model(target_da=target_da,
-                                           ortho_mode_df=ortho_mode_df,
+                                           ortho_mode_df=X,
                                            lam=param_ds['lam'],
                                            offset=param_ds['offset'])
 
@@ -200,4 +222,5 @@ def obsLE_pipeline(n_ens_members,
                 mode_list=mode_list,
                 lam=param_ds['lam'],
                 offset=param_ds['offset'],
+                forcings_df=forcings_df,
                 save_path=save_path)

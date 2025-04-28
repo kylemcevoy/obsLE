@@ -2,7 +2,7 @@
 import numpy as np
 import xarray as xr
 
-import transform
+import obsLE.transform
 
 def fit_linear_models(y, X):
     """Fit OLS models of each individual column (locations) of y regressed against

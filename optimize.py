@@ -1,8 +1,8 @@
 import numpy as np
 import xarray as xr
 
-import transform
-import process_data as data_proc
+import obsLE.transform
+import obsLE.process_data as data_proc
 
 ###### Optimization Helpers
 def np_to_da(data_np, var_name, coord_dict, nan_mask):
