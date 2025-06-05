@@ -45,7 +45,7 @@ def np_to_da(data_np, var_name, coord_dict, nan_mask):
 
 ### Optimization of profile likelihoods for Box-cox transformations
 def optimize_transform(target_da,
-                       ortho_mode_df,
+                       X,
                        lambda_values,
                        offset_values,
                        save_path=None):
@@ -59,10 +59,11 @@ def optimize_transform(target_da,
         See data_processing.check_target() for more on expectations about
         the target_da.
 
-    ortho_mode_df: pd.DataFrame, dims: (time, #{climate_modes} + 1)
-        ortho_mode_df contains monthly values for the orthogonalized and
-        standardized climate modes. The first column contains an intercept
-        See data_processing.build_ortho_mode() for additional details.
+    X: pd.DataFrame, dims: (time, #{climate_modes} + 1)
+        X is the design matrix for the regression. It contains monthly values for 
+        the forcings and the orthogonalized and standardized climate modes. 
+        The first column contains an intercept. See 
+        data_processing.build_ortho_mode() for additional details.
 
      lambda_values: np.ndarray, 1D
          Contains the values for lambda to optimize over. lambda is the power
@@ -91,7 +92,6 @@ def optimize_transform(target_da,
     """
 
     target_da = data_proc.check_target(target_da)
-    ortho_mode_df = data_proc.check_ortho_mode(ortho_mode_df)
 
     # Find locations that are always NaN and create a mask for the non-NaN
     # locations.
@@ -102,11 +102,11 @@ def optimize_transform(target_da,
     target_values = target_da.values[:, xr_nan_mask]
     
     l = target_values.shape[1]
-    n = ortho_mode_df.shape[0] // 12
-    p = ortho_mode_df.shape[1]
+    n = X.shape[0] // 12
+    p = X.shape[1]
 
     target_reshape = target_values.reshape(n, 12, l)
-    ortho_mode_reshape = ortho_mode_df.values.reshape(n, 12, p)
+    X_reshape = X.values.reshape(n, 12, p)
     
     lambda_len = len(lambda_values)
     offset_len = len(offset_values)
@@ -122,11 +122,11 @@ def optimize_transform(target_da,
     
     for i, lam in enumerate(lambda_values):
         for j, offset in enumerate(offset_values):
-            transformed_data = transform.boxcox_transform_np(target_reshape, offset=offset, lam=lam)
+            transformed_data = obsLE.transform.boxcox_transform_np(target_reshape, offset=offset, lam=lam)
             for m in range(12):
                 # y is a n x l matrix so np.linalg.lstsq fits l independent regressions on the covariates
                 y = transformed_data[:, m]
-                lm_out = np.linalg.lstsq(ortho_mode_reshape[:, m], y)
+                lm_out = np.linalg.lstsq(X_reshape[:, m], y)
                 # lstsq returns the RSS as the second element as a (l, ) shaped numpy array
                 RSS_array[i, j, m] = lm_out[1]
     

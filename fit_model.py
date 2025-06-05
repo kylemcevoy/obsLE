@@ -215,7 +215,7 @@ def fit_optimized_model(target_da,
         build_model_ds() for additional details.
     """
     
-    transformed_target = transform.boxcox_transform(target_da,
+    transformed_target = obsLE.transform.boxcox_transform(target_da,
                                                     lam=lam,
                                                     offset=offset)
 

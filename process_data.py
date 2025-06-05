@@ -157,13 +157,77 @@ def process_climate_modes(mode_path,
 
     return mode_df
 
+def preprocess_so2(hist_files, future_files, save_path=None):
+    
+    import regionmask
+    import cftime
+    from itertools import product
+
+    so2_hist = xr.open_mfdataset(hist_files)
+    so2_hist = so2_hist['SO2_em_anthro']
+    
+    so2_fut = xr.open_mfdataset(future_files)
+    so2_fut = so2_fut['SO2_em_anthro']
+
+    units = so2_hist.units
+    long_name = so2_hist.long_name
+
+    so2 = xr.concat([so2_hist, so2_fut], dim='time')
+    so2 = so2.sum('sector')
+    so2 = so2.sel(time=slice('1920', '2020'))
+
+    lon_coord = so2.lon
+    lat_coord = so2.lat
+    countries = regionmask.defined_regions.natural_earth_v5_0_0.countries_110
+    US_mask = countries.mask(lon_coord, lat_coord) == 4
+    so2_subset = so2.where(US_mask)
+
+    so2_conus = so2_subset.sel(lat=slice(22, 50), lon=slice(-130, -60))
+
+    so2_weighted = so2_conus.weighted(np.cos(np.deg2rad(so2_conus.lat)))
+
+    so2_mean = so2_weighted.mean(dim=['lat', 'lon'])
+
+    # convert from kg m-2 s-1 to g m-2 d-1
+    so2_mean = so2_mean * (1000.0 * 60 * 60 * 24)
+    
+    dates = [cftime.DatetimeNoLeap(year, month, 16) 
+             for year, month in product(range(2016, 2020), range(1, 13))]
+
+    
+    month_dates = []
+    for i in range(1, 13):
+        month_dates.append([date for date in dates if date.month == i])
+
+    interp = []
+    for month in range(1, 13):
+        interp.append((so2_mean.
+                       sel(time=so2_mean.time.dt.month == month).
+                       interp(time=month_dates[month - 1])))
+
+    interpolated_months = xr.concat(interp, dim='time').sortby('time')
+
+    so2_mean = xr.concat([so2_mean, interpolated_months], dim='time').sortby('time')
+
+    so2_mean = so2_mean.assign_attrs(units='g m-2 d-1', 
+                                     description=('CONUS mean anthropogenic SO2 '
+                                                  'emissions from input4MIP files. '
+                                                  'See preprocess_so2() from '
+                                                  'process_data.py'))
+    so2_mean = so2_mean.compute()
+
+    if save_path is not None:
+        so2_mean.to_netcdf(save_path + 'conus_mean_so2.nc')
+
+    return(so2_mean)
+
 def process_forcings(forcings_path,
                      start_year='1920',
                      end_year='2020',
                      save_path=None):
 
     var_fnames = {'ico2_log': 'ico2_log.nc',
-                 'so2': 'so2_em_anthro.nc'}
+                 'so2': 'conus_mean_so2.nc'}
     
     ico2_log = xr.open_dataset(forcings_path + var_fnames['ico2_log'],
                               decode_times=False)
