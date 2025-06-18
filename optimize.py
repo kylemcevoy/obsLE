@@ -54,10 +54,10 @@ def optimize_transform(y,
 
     Parameters
     ----------
-    target_da: xr.DataArray, dims: (time, lat, lon)
+    y: xr.DataArray, dims: (time, lat, lon)
         DataArray containing the target variable for regressions/Obs-LE. 
         See data_processing.check_target() for more on expectations about
-        the target_da.
+        the y.
 
     X: pd.DataFrame, dims: (time, #{climate_modes} + 1)
         X is the design matrix for the regression. It contains monthly values for 
@@ -91,15 +91,15 @@ def optimize_transform(y,
         offset_values that resulted in the maximum log-likelihood over the grid.
     """
 
-    target_da = data_proc.check_target(target_da)
+    y = data_proc.check_target(y)
 
     # Find locations that are always NaN and create a mask for the non-NaN
     # locations.
-    xr_nan_mask = ~target_da.isnull().all(dim='time')
+    xr_nan_mask = ~y.isnull().all(dim='time')
     nan_mask = xr_nan_mask.values
 
     # Expected dimensions are (time x lat x lon)
-    target_values = target_da.values[:, xr_nan_mask]
+    target_values = y.values[:, xr_nan_mask]
     
     l = target_values.shape[1]
     n = X.shape[0] // 12
@@ -171,14 +171,14 @@ def optimize_transform(y,
     best_offsets = offset_values[best_items[1]]
     
     coord_dict = {'month': np.arange(1, 13),
-                  'lat': target_da['lat'],
-                  'lon': target_da['lon']}
+                  'lat': y['lat'],
+                  'lon': y['lon']}
     
     coord_dict_llik = {'lam': lambda_values,
                        'offset': offset_values,
                        'month': np.arange(1, 13),
-                       'lat': target_da['lat'],
-                       'lon': target_da['lon']}
+                       'lat': y['lat'],
+                       'lon': y['lon']}
     
     lambda_da = np_to_da(best_lambdas,
                          var_name='lam',
