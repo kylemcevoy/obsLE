@@ -115,25 +115,31 @@ def optimize_transform(y,
     
     for i, lam in enumerate(lambda_values):
         for j, offset in enumerate(offset_values):
-            boxcox_lik_J[i, j] = (lam - 1) * np.sum(np.log(target_reshape + offset), axis=0)
+            boxcox_lik_J[i, j] = (lam - 1) * np.sum(np.log(target_reshape + offset),
+                                                    axis=0)
     
     # Find the RSS of each regression model after transformation
     RSS_array = np.zeros((lambda_len, offset_len, 12, l))
     
     for i, lam in enumerate(lambda_values):
         for j, offset in enumerate(offset_values):
-            transformed_data = obsLE.transform.boxcox_transform_np(target_reshape, offset=offset, lam=lam)
+            transformed_data = obsLE.transform.boxcox_transform_np(target_reshape,
+                                                                   offset=offset,
+                                                                   lam=lam)
             for m in range(12):
-                # y is a n x l matrix so np.linalg.lstsq fits l independent regressions on the covariates
-                y = transformed_data[:, m]
-                lm_out = np.linalg.lstsq(X_reshape[:, m], y)
-                # lstsq returns the RSS as the second element as a (l, ) shaped numpy array
+                # y is a n x l matrix so np.linalg.lstsq fits l independent 
+                # regressions on the covariates
+                y_transformed = transformed_data[:, m]
+                lm_out = np.linalg.lstsq(X_reshape[:, m], y_transformed)
+                # lstsq returns the RSS as the second element as a (l, ) shaped numpy 
+                # array
                 RSS_array[i, j, m] = lm_out[1]
     
     # MLE estimate of sigma^2 is RSS / n
     sigma2_array = RSS_array / n
     
-    # Log likelihood for regression model on transformed y with normal errors + Jacobian of transform
+    # Log likelihood for regression model on transformed y with normal errors 
+    # + Jacobian of transform
     log_lik_array = (
         -(n / 2) * np.log(2 * np.pi)
         - (n / 2) * np.log(sigma2_array)
@@ -154,8 +160,9 @@ def optimize_transform(y,
             max_log_lik = np.max(log_lik_mat)
             best_items_tmp = np.argwhere(log_lik_mat == max_log_lik)
             if best_items_tmp.shape[0] > 1:
-                # if there is no transform then all offsets will have the same likelihood
-                # since the offset can just be folded into the intercept of the linear model.
+                # if there is no transform then all offsets will have the same 
+                # likelihood since the offset can just be folded into the intercept 
+                # of the linear model.
                 if all(best_items_tmp[:, 0] == no_transform_indx):
                     best_items[:, m, l] = best_items_tmp[0]
                 else:
