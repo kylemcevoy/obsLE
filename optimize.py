@@ -44,7 +44,7 @@ def np_to_da(data_np, var_name, coord_dict, nan_mask):
 
 
 ### Optimization of profile likelihoods for Box-cox transformations
-def optimize_transform(target_da,
+def optimize_transform(y,
                        X,
                        lambda_values,
                        offset_values,
