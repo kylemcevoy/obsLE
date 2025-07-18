@@ -1,10 +1,10 @@
 import numpy as np
 
 import obsLE.process_data as data_proc
-import obsLE.transform
+import obsLE.transform as transform
 import obsLE.optimize as optim
 import obsLE.fit_model as fit
-import obsLE.resample
+import obsLE.resample as resample
 
 
 def build_obsLE(beta_ds,
@@ -78,7 +78,7 @@ def build_obsLE(beta_ds,
 
     base_mean_field = beta_ds['intercept'][mode_index]
 
-    if forcings_df is not None:
+    if forcing_df is not None:
         forcings_list = forcing_df.columns.to_list()
 
         for forcing in forcings_list:
@@ -118,7 +118,6 @@ def build_obsLE(beta_ds,
 
 def obsLE_pipeline(n_ens_members,
                    y,
-                   mode_df,
                    start_year,
                    end_year,
                    mode_list,
@@ -127,7 +126,8 @@ def obsLE_pipeline(n_ens_members,
                    fit_seasonal,
                    block_size,
                    save_path,
-                   forcings_df=None,
+                   mode_df=None,
+                   forcing_df=None,
                    mode_path=None):
     """Construct the Observational Large Ensemble (Obs-LE).
     
@@ -184,7 +184,9 @@ def obsLE_pipeline(n_ens_members,
     mode_path: str
         path to the climate modes
     """
-
+    if mode_df is None and mode_path is None:
+        raise ValueError('One of mode_df or mode_path must be specified')
+    
     ortho_mode_df = data_proc.build_ortho_mode_df(mode_df=mode_df,
                                                   start_year=start_year,
                                                   end_year=end_year,
@@ -192,8 +194,8 @@ def obsLE_pipeline(n_ens_members,
                                                   save_path=save_path,
                                                   mode_path=mode_path)
 
-    if forcings_df is not None:
-        X = ortho_mode_df.merge(forcings_df)
+    if forcing_df is not None:
+        X = ortho_mode_df.merge(forcing_df)
     else:
         X = ortho_mode_df
     
@@ -222,5 +224,5 @@ def obsLE_pipeline(n_ens_members,
                 mode_list=mode_list,
                 lam=param_ds['lam'],
                 offset=param_ds['offset'],
-                forcings_df=forcings_df,
+                forcing_df=forcing_df,
                 save_path=save_path)
