@@ -117,7 +117,7 @@ def build_obsLE(beta_ds,
         obsLE_member.to_netcdf(member_savename)
 
 def obsLE_pipeline(n_ens_members,
-                   target_da,
+                   y,
                    mode_df,
                    start_year,
                    end_year,
@@ -197,14 +197,14 @@ def obsLE_pipeline(n_ens_members,
     else:
         X = ortho_mode_df
     
-    param_ds, llik_ds = optim.optimize_transform(target_da=target_da,
-                                                 ortho_mode_df=X,
+    param_ds, llik_ds = optim.optimize_transform(y=y,
+                                                 X=X,
                                                  lambda_values=lambda_values,
                                                  offset_values=offset_values,
                                                  save_path=save_path)
     
-    beta, lm_out = fit.fit_optimized_model(target_da=target_da,
-                                           ortho_mode_df=X,
+    beta, lm_out = fit.fit_optimized_model(y=y,
+                                           X=X,
                                            lam=param_ds['lam'],
                                            offset=param_ds['offset'])
 

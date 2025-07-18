@@ -103,7 +103,7 @@ def build_model_ds(beta,
 
     nan_mask: np.ndarray, dims: (lat, lon)
         np.ndarray containing True/False. The Trues mark (lat, lon) locations in t
-        he original target_da (that was converted to y for fit_linear_models) where
+        he original y (that was converted to y for fit_linear_models) where
         there was actual data, i.e. locations not filled with np.nan.
 
     coords: dict or xarray coords
@@ -173,22 +173,22 @@ def build_model_ds(beta,
     return beta_ds, lm_out_ds
 
 
-def fit_optimized_model(target_da,
-                        ortho_mode_df,
+def fit_optimized_model(y,
+                        X,
                         lam,
                         offset,
                         model_mode_list=None,
                         save_path=None):
-    """Wrapper function that transforms the target_da given the optimized
+    """Wrapper function that transforms y by the optimized
     transform. Then fits the linear regression model onto the orthogonalized 
     climate modes.
 
     Parameters
     ----------
-    target_da: xr.DataArray, dims: (time, lat, lon).
+    y: xr.DataArray, dims: (time, lat, lon).
         Contains the target variable for the regression/Obs-LE.
 
-    ortho_mode_df: pd.DataFrame, dims: (time, #{climate modes} + 1)
+    X: pd.DataFrame, dims: (time, #{climate modes} + 1)
         Contains the orthogonalized climate modes for the regression.
 
     lam: xr.DataArray, dims: (month, lat, lon)
@@ -200,7 +200,7 @@ def fit_optimized_model(target_da,
     model_mode_list: list of str or None
         contains the names of the climate modes to fit the model on. Do not include
         intercept, as it will be added to the list by default. If None, all modes 
-        from ortho_mode_df are used.
+        from X are used.
 
     save_path: str or None
         path to the directory to save the output. The directory should end in /.
@@ -215,7 +215,7 @@ def fit_optimized_model(target_da,
         build_model_ds() for additional details.
     """
     
-    transformed_target = obsLE.transform.boxcox_transform(target_da,
+    transformed_target = obsLE.transform.boxcox_transform(y,
                                                     lam=lam,
                                                     offset=offset)
 
@@ -225,15 +225,15 @@ def fit_optimized_model(target_da,
     transformed_values = transformed_target.values[:, nan_mask]
 
     beta, RSS, residuals, fitted_values = fit_linear_models(y=transformed_values,
-                                                            X=ortho_mode_df)
+                                                            X=X)
 
     beta_ds, lm_out_ds = build_model_ds(beta=beta,
-                                        var_names=ortho_mode_df.columns.to_list(),
+                                        var_names=X.columns.to_list(),
                                         RSS=RSS,
                                         residuals=residuals,
                                         fitted_values=fitted_values,
                                         nan_mask=nan_mask,
-                                        coords=target_da.coords)
+                                        coords=y.coords)
 
     if save_path is not None:
         beta_ds.to_netcdf(save_path + 'beta.nc')

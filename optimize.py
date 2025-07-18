@@ -48,6 +48,7 @@ def optimize_transform(y,
                        X,
                        lambda_values,
                        offset_values,
+                       check_input=False,
                        save_path=None):
     """Perform optimization of Box-Cox parameters at each location using maximum
     likelihood over a grid of parameters. The profile likelihood approach is taken.
@@ -90,8 +91,8 @@ def optimize_transform(y,
         These DataArrays contain the combination of values in lam_values and
         offset_values that resulted in the maximum log-likelihood over the grid.
     """
-
-    y = data_proc.check_target(y)
+    if check_input:
+        y = data_proc.check_target(y)
 
     # Find locations that are always NaN and create a mask for the non-NaN
     # locations.
