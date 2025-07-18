@@ -1,10 +1,10 @@
 import numpy as np
 
-import process_data as data_proc
-import transform as transform
-import optimize as optim
-import fit_model as fit
-import resample as resample
+import obsLE.process_data as data_proc
+import obsLE.transform as transform
+import obsLE.optimize as optim
+import obsLE.fit_model as fit
+import obsLE.resample as resample
 
 
 def build_obsLE(beta_ds,
@@ -83,7 +83,9 @@ def build_obsLE(beta_ds,
 
         for forcing in forcings_list:
             beta_forcing = beta_ds[forcing]
-            forcing_field = beta_forcing[mode_index].values * forcing_df['forcing']
+            # add axes to the forcing for numpy broadcasting with lon, lat dimensions
+            forcing_ts = forcing_df[forcing].values[:, np.newaxis, np.newaxis]
+            forcing_field = beta_forcing[mode_index].values * forcing_ts
             base_mean_field = base_mean_field + forcing_field
 
     for k in range(n_ens):
