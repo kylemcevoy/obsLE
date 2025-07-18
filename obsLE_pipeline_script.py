@@ -16,7 +16,7 @@ fit_seasonal = [mode != 'pdo' for mode in mode_list]
 # Boxcox parameters for optimization
 # lambda is the boxcox power and offset is the boxcox shift
 # ((y + offset)**lambda - 1) / lambda
-lambda_values = np.array([0, 1/4, 1/3, 1/2, 2/3, 3/4, 1])
+lambda_values = np.array([1/4, 1/3, 1/2, 2/3, 3/4, 1])
 offset_values = np.array([1e-6])
 
 ### Load GPCC
