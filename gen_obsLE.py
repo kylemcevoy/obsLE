@@ -1,10 +1,10 @@
 import numpy as np
 
-import obsLE.process_data as data_proc
-import obsLE.transform as transform
-import obsLE.optimize as optim
-import obsLE.fit_model as fit
-import obsLE.resample as resample
+import process_data as data_proc
+import transform as transform
+import optimize as optim
+import fit_model as fit
+import resample as resample
 
 
 def build_obsLE(beta_ds,
@@ -195,7 +195,7 @@ def obsLE_pipeline(n_ens_members,
                                                   mode_path=mode_path)
 
     if forcing_df is not None:
-        X = ortho_mode_df.merge(forcing_df)
+        X = ortho_mode_df.merge(forcing_df, on='time')
     else:
         X = ortho_mode_df
     

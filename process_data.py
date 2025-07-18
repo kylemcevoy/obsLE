@@ -169,9 +169,6 @@ def preprocess_so2(hist_files, future_files, save_path=None):
     so2_fut = xr.open_mfdataset(future_files)
     so2_fut = so2_fut['SO2_em_anthro']
 
-    units = so2_hist.units
-    long_name = so2_hist.long_name
-
     so2 = xr.concat([so2_hist, so2_fut], dim='time')
     so2 = so2.sum('sector')
     so2 = so2.sel(time=slice('1920', '2020'))
@@ -255,6 +252,8 @@ def process_forcings(forcings_path,
                                                 freq='MS'))
     
     forcing_df = pd.DataFrame({'ico2_log': ico2_log_pd, 'so2': so2_pd})
+
+    forcing_df.index.rename('time', inplace=True)
 
     if save_path is not None:
         forcing_ds = forcing_df.to_xarray()

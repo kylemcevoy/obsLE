@@ -16,7 +16,6 @@
 #    new Obs-LE members.
 
 import numpy as np
-import pandas as pd
 import regionmask # for subsetting to CONUS
 import xarray as xr
 
