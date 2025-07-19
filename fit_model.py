@@ -237,6 +237,6 @@ def fit_optimized_model(y,
 
     if save_path is not None:
         beta_ds.to_netcdf(save_path + 'beta.nc')
-        lm_out.to_netcdf(save_path + 'regression_output.nc')
+        lm_out_ds.to_netcdf(save_path + 'regression_output.nc')
 
     return beta_ds, lm_out_ds

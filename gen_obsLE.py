@@ -179,9 +179,9 @@ def obsLE_pipeline(n_ens_members,
         Must be divisible by 12, so that only whole years are included.
 
     save_path: str
-        Path to the directory in which to save the outputted Obs-LE members. Should
-        end in /. Individual members are saved as netCDF files at:
-        save_path + 'obsLE_member{member #}.nc'
+        Path to the directory in which to save the outputted Obs-LE members and 
+        component files. Should end in /. Individual members are saved as 
+        netCDF files at: save_path + 'obsLE_member{member #}.nc'
 
     mode_path: str
         path to the climate modes
@@ -210,7 +210,8 @@ def obsLE_pipeline(n_ens_members,
     beta, lm_out = fit.fit_optimized_model(y=y,
                                            X=X,
                                            lam=param_ds['lam'],
-                                           offset=param_ds['offset'])
+                                           offset=param_ds['offset'],
+                                           save_path=save_path)
 
     residuals_da = lm_out['residuals']
 
