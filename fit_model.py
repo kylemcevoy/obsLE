@@ -2,7 +2,7 @@
 import numpy as np
 import xarray as xr
 
-import obsLE.transform
+from . import transform
 
 def fit_linear_models(y, X):
     """Fit OLS models of each individual column (locations) of y regressed against
@@ -13,8 +13,8 @@ def fit_linear_models(y, X):
     Parameters
     ----------
     y: 2D numpy array
-        Matrix containing n observation rows against l columns containing time
-        series of output data. l is an index for the locations at which the
+        Matrix containing n observation rows against L columns containing time
+        series of output data. L is an index for the locations at which the
         time series are recorded.
     X: 2D numpy array
         Design matrix containing n observation rows against p variable columns
@@ -26,23 +26,23 @@ def fit_linear_models(y, X):
     -------
     tuple(beta, RSS, residuals, fitted_values)
 
-    beta: numpy array of shape (12, p, l)
+    beta: numpy array of shape (12, p, L)
         Contains the fitted regression coefficients indexed by 
         (month, variable, location). For each regression model fit using 
         y[I{month_j}] ~ X[I{month_j}], where I{month_j} is an indicator for the
-        rows coming from month j. If l = 1, the last dimension is dropped.
+        rows coming from month j. If L = 1, the last dimension is dropped.
 
-    RSS: numpy array of shape (12, l)
-        Contains the residual sums of squares of each fitted model. If l = 1, the
+    RSS: numpy array of shape (12, L)
+        Contains the residual sums of squares of each fitted model. If L = 1, the
         last dimension is dropped.
         
-    residuals: numpy array of shape (12, n // 12, l)
-        Contains the residuals of each fitted model split by month. If l = 1, the
+    residuals: numpy array of shape (12, n // 12, L)
+        Contains the residuals of each fitted model split by month. If L = 1, the
         last dimension is dropped.
 
     fitted_values: numpy array of shape (12, n // 12, l)
         Contains the fitted values of each regression model split by month. If
-        l = 1 the last dimension is dropped.
+        L = 1 the last dimension is dropped.
     """
     
     n = X.shape[0]
@@ -50,12 +50,12 @@ def fit_linear_models(y, X):
     p = X.shape[1]
     
     if y.ndim > 1:
-        l = y.shape[1]
+        L = y.shape[1]
         
-        beta = np.zeros((12, p, l))
-        residuals = np.zeros((12, n // 12, l))
-        fitted_values = np.zeros((12, n // 12, l))
-        RSS = np.zeros((12, l))
+        beta = np.zeros((12, p, L))
+        residuals = np.zeros((12, n // 12, L))
+        fitted_values = np.zeros((12, n // 12, L))
+        RSS = np.zeros((12, L))
     else:
         beta = np.zeros((12, p))
         residuals = np.zeros((12, n // 12))
@@ -128,13 +128,13 @@ def build_model_ds(beta,
     
     # beta is shape (m x p x l), RSS is m x l, residuals/fitted_values are n x m x l
     p = beta.shape[1]
-    l = residuals.shape[2]
+    L = residuals.shape[2]
     lat_len = lat_coord.shape[0]
     lon_len = lon_coord.shape[0]
     time_len = time_coord.shape[0]
 
-    residuals = residuals.reshape((time_len, l))
-    fitted_values = fitted_values.reshape((time_len, l))
+    residuals = residuals.reshape((time_len, L))
+    fitted_values = fitted_values.reshape((time_len, L))
     
     beta_data = np.empty((12, p, lat_len, lon_len))
     beta_data.fill(np.nan)
@@ -215,7 +215,7 @@ def fit_optimized_model(y,
         build_model_ds() for additional details.
     """
     
-    transformed_target = obsLE.transform.boxcox_transform(y,
+    transformed_target = transform.boxcox_transform(y,
                                                     lam=lam,
                                                     offset=offset)
 

@@ -1,8 +1,8 @@
 import numpy as np
 import xarray as xr
 
-import obsLE.transform
-import obsLE.process_data as data_proc
+from . import transform
+from . import process_data as data_proc
 
 ###### Optimization Helpers
 def np_to_da(data_np, var_name, coord_dict, nan_mask):
@@ -102,17 +102,17 @@ def optimize_transform(y,
     # Expected dimensions are (time x lat x lon)
     target_values = y.values[:, xr_nan_mask]
     
-    l = target_values.shape[1]
+    L = target_values.shape[1]
     n = X.shape[0] // 12
     p = X.shape[1]
 
-    target_reshape = target_values.reshape(n, 12, l)
+    target_reshape = target_values.reshape(n, 12, L)
     X_reshape = X.values.reshape(n, 12, p)
     
     lambda_len = len(lambda_values)
     offset_len = len(offset_values)
     # Find the Jacobian determinant for the likelihood function of precip
-    boxcox_lik_J = np.zeros((lambda_len, offset_len, 12, l))
+    boxcox_lik_J = np.zeros((lambda_len, offset_len, 12, L))
     
     for i, lam in enumerate(lambda_values):
         for j, offset in enumerate(offset_values):
@@ -120,13 +120,13 @@ def optimize_transform(y,
                                                     axis=0)
     
     # Find the RSS of each regression model after transformation
-    RSS_array = np.zeros((lambda_len, offset_len, 12, l))
+    RSS_array = np.zeros((lambda_len, offset_len, 12, L))
     
     for i, lam in enumerate(lambda_values):
         for j, offset in enumerate(offset_values):
-            transformed_data = obsLE.transform.boxcox_transform_np(target_reshape,
-                                                                   offset=offset,
-                                                                   lam=lam)
+            transformed_data = transform.boxcox_transform_np(target_reshape,
+                                                            offset=offset,
+                                                            lam=lam)
             for m in range(12):
                 # y is a n x l matrix so np.linalg.lstsq fits l independent 
                 # regressions on the covariates
@@ -147,7 +147,7 @@ def optimize_transform(y,
         - ((1 / (2 * sigma2_array)) * RSS_array) 
         + boxcox_lik_J)
     
-    best_items = np.zeros((2, 12, l), dtype='int')
+    best_items = np.zeros((2, 12, L), dtype='int')
     ties_counter = 0
     
     if np.isin(1.0, lambda_values):
@@ -156,8 +156,8 @@ def optimize_transform(y,
         no_transform_indx = np.nan
     
     for m in range(12):
-        for l in range(l):
-            log_lik_mat = log_lik_array[:, :, m, l]
+        for k in range(L):
+            log_lik_mat = log_lik_array[:, :, m, k]
             max_log_lik = np.max(log_lik_mat)
             best_items_tmp = np.argwhere(log_lik_mat == max_log_lik)
             if best_items_tmp.shape[0] > 1:
@@ -165,12 +165,12 @@ def optimize_transform(y,
                 # likelihood since the offset can just be folded into the intercept 
                 # of the linear model.
                 if all(best_items_tmp[:, 0] == no_transform_indx):
-                    best_items[:, m, l] = best_items_tmp[0]
+                    best_items[:, m, k] = best_items_tmp[0]
                 else:
                     ties_counter += 1
-                    best_items[:, m, l] = best_items_tmp[0]
+                    best_items[:, m, k] = best_items_tmp[0]
             else:
-                best_items[:, m, l] = best_items_tmp
+                best_items[:, m, k] = best_items_tmp
     
     if ties_counter > 0:
             print(f'optimization ties: {ties_counter}')

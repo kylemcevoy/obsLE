@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 
 #package defined functions
-import obsLE.process_data as data_proc
+from . import process_data as data_proc
 
 def iaaft(x, fit_seasonal=False, rng=None):
     """Return a surrogate time series based on IAAFT.
@@ -192,7 +192,7 @@ def create_surrogate_modes(ortho_mode_df,
         # xarray Dataset constructor uses a tuple of (dimensions, ndarray)
         # to construct variables
         surrogate_list = [(dim_tuple, modes_out[:, i]) for i in range(n_modes)]
-        var_dict = dict(zip(mode_list, surr_list))
+        var_dict = dict(zip(mode_list, surrogate_list))
         
         surrogate_ds = xr.Dataset(data_vars=var_dict,
                              coords={'member': np.arange(n_ens_members),

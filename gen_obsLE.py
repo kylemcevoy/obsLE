@@ -1,10 +1,10 @@
 import numpy as np
 
-import obsLE.process_data as data_proc
-import obsLE.transform as transform
-import obsLE.optimize as optim
-import obsLE.fit_model as fit
-import obsLE.resample as resample
+from . import process_data as data_proc
+from . import transform as transform
+from . import optimize as optim
+from . import fit_model as fit
+from . import resample as resample
 
 
 def build_obsLE(beta_ds,
