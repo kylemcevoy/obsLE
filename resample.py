@@ -187,19 +187,20 @@ def create_surrogate_modes(ortho_mode_df,
                 
             modes_out[k, j] = surrogate_ts
 
+    dim_tuple = ('ens_member', 'time')
+    # xarray Dataset constructor uses a tuple of (dimensions, ndarray)
+    # to construct variables
+    surrogate_list = [(dim_tuple, modes_out[:, i]) for i in range(n_modes)]
+    var_dict = dict(zip(mode_list, surrogate_list))
+    
+    surrogate_ds = xr.Dataset(data_vars=var_dict,
+                              coords={'ens_member': np.arange(n_ens_members),
+                                      'time': time_indx})
+
     if save_path is not None:
-        dim_tuple = ('member', 'time')
-        # xarray Dataset constructor uses a tuple of (dimensions, ndarray)
-        # to construct variables
-        surrogate_list = [(dim_tuple, modes_out[:, i]) for i in range(n_modes)]
-        var_dict = dict(zip(mode_list, surrogate_list))
-        
-        surrogate_ds = xr.Dataset(data_vars=var_dict,
-                             coords={'member': np.arange(n_ens_members),
-                                     'time': time_indx})
         surrogate_ds.to_netcdf(save_path + 'surrogate_modes.nc')
 
-    return modes_out, mode_list, time_indx
+    return surrogate_ds
 
 def bootstrap_residuals(residuals_da, block_size, rng=None):
     """Perform moving block bootstrapping of the residuals. The blocks contain the 
@@ -208,13 +209,15 @@ def bootstrap_residuals(residuals_da, block_size, rng=None):
 
     Parameters
     ----------
-    residuals_da: xr.DataArray, dims: (time, lat, lon)
+    residuals_da: xr.DataArray, dims (time, lat, lon)
         DataArray containing residuals from the linear models fit by 
         fit_model.fit_linear_models(). See fit_model.build_model_ds()
+
     block_size: int
         Number of consecutive months to include in the blocks for the moving block
         bootstrap. Must be divisible by 12 so that full years are included in the 
         moving block bootstrap. The entire spatial field is kept in each block.
+
     rng: np.random.Generator
         As constructed by np.random.default_rng().
 

@@ -189,7 +189,7 @@ def fit_optimized_model(y,
         Contains the target variable for the regression/Obs-LE.
 
     X: pd.DataFrame, dims: (time, #{climate modes} + 1)
-        Contains the orthogonalized climate modes for the regression.
+        Contains the orthogonalized climate modes and forcings for the regression.
 
     lam: xr.DataArray, dims: (month, lat, lon)
         contains the optimized lambda parameter for the Box-Cox transform.
