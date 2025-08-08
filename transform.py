@@ -1,5 +1,4 @@
 import numpy as np
-import xarray as xr
 
 ####### Boxcox Transforms and Inverse Transforms.
 def boxcox_transform_np(x, offset, lam):
@@ -45,56 +44,31 @@ def boxcox_transform(x, offset, lam):
         data_processing.check_target() for more information on the expected 
         input x.
 
-    offset : xr.DataArray/scalar
-        If offset is a DataArray it should have dimensions (month, lat, lon). If it
-        is a scalar value, the constant value will be added to all the values of x.
-        Otherwise, the offset added to x will be matched to the correct 
-        (time.month, lat, lon) of x.
+    offset : float64
+        The constant value will be added to all the values of x. Should be
+        a positive value. After adding the offset all values should be
+        positive.
 
     lam : xr.DataArray, dim: (month, lat, lon)
         The Box-Cox power parameter. The parameter is matched to x using
-        (time.month, lat, lon).
+        (time.month, lat, lon). Only powers greater than 0 are allowed,
+        i.e. no log transform.
 
     Returns
     -------
     y : xr.DataArray, dims: (time, lat, lon)
         y is the Box-Cox transform applied to x with parameters given by offset
-        and lam. The Box-Cox transform is defined by:
-            if lambda = 0: y = log(x + offset)
-            if lambda != 0: y = ((x + offset)^lambda - 1) / lambda
+        and lam. For non-zero lambda, the Box-Cox transform is defined by:
+        y = ((x + offset)^lambda - 1) / lambda
     """
     
     # copy the xarray object, so original xarray is not affected by assignments
-    y = x.copy()
-    
-    if np.isscalar(offset):
-        da_flag = False
-        y = y + offset
-    elif isinstance(offset, xr.DataArray):
-        da_flag = True
-    else:
-        raise ValueError('offset should be a single scalar offset value'
-                         'or a xr.DataArray containing offsets for each location '
-                         '+ month')
+    y = x + offset
 
-    #lam was optimized for each month, so perform transform looping over the months 
-    for i in range(1, 13):
-        month_slice = y.loc[dict(time = (y['time.month'] == i))]
-        
-        if da_flag:
-            month_slice = month_slice + offset.loc[dict(month = i)]
-            
-        lam_slice = lam.loc[dict(month = i)]
+    lam_ts = lam.loc[{'month': y['time.month']}]
 
-        # the use of fmax here is to suppress divide by 0 warnings at locations 
-        # where lambda == 0, so the log transform will be used instead anyway
-        lam_slice_trunc = np.fmax(lam_slice, 1e-6)
-        month_transform = xr.where(lam_slice == 0,
-                               np.log(month_slice), 
-                               (month_slice**lam_slice - 1) / lam_slice_trunc)
-    
-        y.loc[dict(time=(y['time.month'] == i))] = month_transform
-        
+    y = (y**lam_ts - 1) / lam_ts
+
     return y
 
 def inv_boxcox_transform(y, offset, lam):  
@@ -105,11 +79,10 @@ def inv_boxcox_transform(y, offset, lam):
     y : xr.DataArray, dims: (time, lat, lon)
         y should be a DataArray. The time dimension should be a datetime64. 
 
-    offset : xr.DataArray/scalar
-        If offset is a DataArray it should have dimensions (month, lat, lon). If it
-        is a scalar value, the constant value will be subtracted from all the values 
-        of y. Otherwise, the offset subtracted from y will be matched to the correct 
-        (time.month, lat, lon) of y.
+    offset : float64
+        The constant value will be added to all the values of x. Must be
+        a positive value. After adding the offset all values should be
+        positive.
 
     lam : xr.DataArray, dim: (month, lat, lon)
         The Box-Cox power parameter. The parameter is matched to y using
@@ -119,42 +92,26 @@ def inv_boxcox_transform(y, offset, lam):
     -------
     x : xr.DataArray, dims: (time, lat, lon)
         x is the inverse Box-Cox transform applied to y with parameters given by 
-        offset and lam. The Inverse Box-Cox transform is defined by:
-            if lambda = 0: x = np.exp(y) - offset
-            if lambda != 0: x = ((y * lambda + 1)^(1 / lambda) - offset
+        offset and lam. The Inverse Box-Cox transform for non-zero lambda
+        is defined by: x = ((lambda * y + 1)^(1 / lambda) - offset
     """
     
-    # copy the xarray object, so original xarray is not affected by assignments
-    x = y.copy()
-    
-    if np.isscalar(offset):
-        da_flag = False
-    elif isinstance(offset, xr.DataArray):
-        da_flag = True
-    else:
-        raise ValueError('offset should be a single scalar offset value' +
-                         'or a xr.DataArray containing offsets for each location '
-                         '+ month')
+    if not np.isscalar(offset):
+        raise ValueError('offset should be a single scalar offset value')
 
-    #lam was optimized for each month, so perform transform looping over the months 
-    for i in range(1, 13):
-        month_slice = x.loc[dict(time = (x['time.month'] == i))]
+    # this construction matches lambda values with y on the 
+    # time axis by month, and creates a matching time coordinate
+    lam_ts = lam.loc[{'month': y['time.month']}]
 
-        lam_slice = lam.loc[dict(month = i)]
+    # ensures that all y values fall within the domain of the
+    # inverse box-cox transform (necessary because of resampling)
+    y = np.fmax(y, -1 / lam_ts)
+    x = (y * lam_ts + 1)**(1 / lam_ts) - offset
 
-        # the use of fmin below is to prevent overflow warnings on locations where 
-        # a non-log boxcox transform was used resulting in still quite large value. 
-        # In these cases, the non-log boxcox-transform will have been applied 
-        # instead anyway.
-        month_transform = xr.where(lam_slice == 0,
-                               np.exp(np.fmin(month_slice, 500)), 
-                               (month_slice * lam_slice + 1)**(1 / lam_slice))
-
-        if da_flag:
-            month_transform = month_transform - offset.loc[dict(month = i)]
-        else:
-            month_transform = month_transform - offset
-
-        x.loc[dict(time=(x['time.month'] == i))] = month_transform
-
+    # y values mapped to -1 / lam_ts will be equal to 0
+    # before subtracting offset, want to stay non-negative
+    # after offset so use np.maximum to do this and propage
+    #  np.nans
+    x = np.maximum(x, 0)
     return x
+    

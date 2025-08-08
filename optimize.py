@@ -47,7 +47,7 @@ def np_to_da(data_np, var_name, coord_dict, nan_mask):
 def optimize_transform(y,
                        X,
                        lambda_values,
-                       offset_values,
+                       offset,
                        check_input=False,
                        save_path=None):
     """Perform optimization of Box-Cox parameters at each location using maximum
@@ -71,12 +71,10 @@ def optimize_transform(y,
          parameter of the Box-Cox Transform and should be non-negative. See
          transform.boxcox_transform() for more details.
 
-    offset_values: np.ndarray, 1D
-        Contains the values for offset to optimize over. Offset gives a linear
-        shift of the values in taret_da before the Box-Cox Transform is applied.
-        See transform.boxcox_transform() for additional details. In most cases,
-        we set offset to a small positive value so that the transform is valid
-        for data with some 0s. e.g. offset_values=[1e-6].
+    offset_values: float64
+        Contains the values for offset to add to y to ensure that the values 
+        are positive. In most cases, we set offset to a small positive value 
+        so that the transform is valid for data with some 0s. e.g. offset=1e-6.
 
     save_path: str
         path to the directory where the output of the optimization should be saved.
@@ -110,31 +108,28 @@ def optimize_transform(y,
     X_reshape = X.values.reshape(n, 12, p)
     
     lambda_len = len(lambda_values)
-    offset_len = len(offset_values)
     # Find the Jacobian determinant for the likelihood function of precip
-    boxcox_lik_J = np.zeros((lambda_len, offset_len, 12, L))
+    boxcox_lik_J = np.zeros((lambda_len, 12, L))
     
     for i, lam in enumerate(lambda_values):
-        for j, offset in enumerate(offset_values):
-            boxcox_lik_J[i, j] = (lam - 1) * np.sum(np.log(target_reshape + offset),
-                                                    axis=0)
+        boxcox_lik_J[i] = (lam - 1) * np.sum(np.log(target_reshape + offset),
+                                             axis=0)
     
     # Find the RSS of each regression model after transformation
-    RSS_array = np.zeros((lambda_len, offset_len, 12, L))
+    RSS_array = np.zeros((lambda_len, 12, L))
     
     for i, lam in enumerate(lambda_values):
-        for j, offset in enumerate(offset_values):
-            transformed_data = transform.boxcox_transform_np(target_reshape,
-                                                            offset=offset,
-                                                            lam=lam)
-            for m in range(12):
-                # y is a n x l matrix so np.linalg.lstsq fits l independent 
-                # regressions on the covariates
-                y_transformed = transformed_data[:, m]
-                lm_out = np.linalg.lstsq(X_reshape[:, m], y_transformed)
-                # lstsq returns the RSS as the second element as a (l, ) shaped numpy 
-                # array
-                RSS_array[i, j, m] = lm_out[1]
+        transformed_data = transform.boxcox_transform_np(target_reshape,
+                                                        offset=offset,
+                                                        lam=lam)
+        for m in range(12):
+            # y is a n x l matrix so np.linalg.lstsq fits l independent 
+            # regressions on the covariates
+            y_transformed = transformed_data[:, m]
+            lm_out = np.linalg.lstsq(X_reshape[:, m], y_transformed)
+            # lstsq returns the RSS as the second element as a (l, ) shaped numpy 
+            # array
+            RSS_array[i, m] = lm_out[1]
     
     # MLE estimate of sigma^2 is RSS / n
     sigma2_array = RSS_array / n
@@ -150,23 +145,12 @@ def optimize_transform(y,
     best_items = np.zeros((2, 12, L), dtype='int')
     ties_counter = 0
     
-    if np.isin(1.0, lambda_values):
-        no_transform_indx = np.where(lambda_values == 1.0)[0][0]
-    else:
-        no_transform_indx = np.nan
-    
     for m in range(12):
         for k in range(L):
-            log_lik_mat = log_lik_array[:, :, m, k]
+            log_lik_mat = log_lik_array[:, m, k]
             max_log_lik = np.max(log_lik_mat)
             best_items_tmp = np.argwhere(log_lik_mat == max_log_lik)
             if best_items_tmp.shape[0] > 1:
-                # if there is no transform then all offsets will have the same 
-                # likelihood since the offset can just be folded into the intercept 
-                # of the linear model.
-                if all(best_items_tmp[:, 0] == no_transform_indx):
-                    best_items[:, m, k] = best_items_tmp[0]
-                else:
                     ties_counter += 1
                     best_items[:, m, k] = best_items_tmp[0]
             else:
@@ -176,30 +160,23 @@ def optimize_transform(y,
             print(f'optimization ties: {ties_counter}')
     
     best_lambdas = lambda_values[best_items[0]]
-    best_offsets = offset_values[best_items[1]]
     
     coord_dict = {'month': np.arange(1, 13),
                   'lat': y['lat'],
                   'lon': y['lon']}
     
     coord_dict_llik = {'lam': lambda_values,
-                       'offset': offset_values,
+                       'offset': np.array([offset]),
                        'month': np.arange(1, 13),
                        'lat': y['lat'],
                        'lon': y['lon']}
     
-    lambda_da = np_to_da(best_lambdas,
+    param_da = np_to_da(best_lambdas,
                          var_name='lam',
                          coord_dict=coord_dict,
                          nan_mask=nan_mask)
-    offset_da = np_to_da(best_offsets,
-                         var_name='offset',
-                         coord_dict=coord_dict,
-                         nan_mask=nan_mask)
     
-    param_ds = xr.Dataset({'lam': lambda_da, 'offset': offset_da})
-    
-    optim_ds = np_to_da(log_lik_array,
+    optim_ds = np_to_da(log_lik_array[:, np.newaxis],
                         var_name="loglik",
                         coord_dict=coord_dict_llik,
                         nan_mask=nan_mask)
@@ -211,7 +188,7 @@ def optimize_transform(y,
     optim_ds['AIC'] = AIC_penalty - 2 * optim_ds['loglik']
 
     if save_path is not None:
-        param_ds.to_netcdf(save_path + 'optim_transform_params.nc')
+        param_da.to_netcdf(save_path + 'optim_transform_params.nc')
         optim_ds.to_netcdf(save_path + 'optim_transform_loglik.nc')
         
-    return param_ds, optim_ds
+    return param_da, optim_ds

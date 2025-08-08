@@ -194,8 +194,8 @@ def fit_optimized_model(y,
     lam: xr.DataArray, dims: (month, lat, lon)
         contains the optimized lambda parameter for the Box-Cox transform.
     
-    offset: xr.DataArray, dims: (month, lat, lon)
-        contains the optimized offset parameter for the Box-Cox transform.
+    offset: float64
+        contains the offset parameter for the Box-Cox transform.
 
     model_mode_list: list of str or None
         contains the names of the climate modes to fit the model on. Do not include

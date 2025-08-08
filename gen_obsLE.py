@@ -2,7 +2,7 @@ import numpy as np
 import warnings
 
 from . import process_data as data_proc
-from . import transform as transform
+from . import transform as transforms
 from . import optimize as optim
 from . import fit_model as fit
 from . import resample as resample
@@ -15,6 +15,7 @@ def build_obsLE(beta_ds,
                 lam,
                 offset,
                 save_path,
+                inv_transform=True,
                 forcing_df=None,
                 rng=None):
     """
@@ -73,7 +74,7 @@ def build_obsLE(beta_ds,
     if rng is None:
         rng = np.random.default_rng()
 
-    nan_mask = residuals_da.isnull().any('time')
+    # nan_mask = residuals_da.isnull().any('time')
 
     mode_list = list(surrogate_modes.data_vars.keys())
 
@@ -107,7 +108,11 @@ def build_obsLE(beta_ds,
                                                            block_size=block_size,
                                                            rng=rng)
         
-        surrogate_member = surrogate_modes.sel(ens_member=mem)
+        surrogate_member = (
+            surrogate_modes
+                .sel(ens_member=mem)
+                .drop_vars('ens_member')
+            )
 
         mean_field = base_mean_field
 
@@ -120,16 +125,35 @@ def build_obsLE(beta_ds,
         mean_field = mean_field.drop_vars('month')
 
         obsLE_member = mean_field + bootstrap_residuals
-        # precip must be non-negative in transformed space.
-        obsLE_member = (obsLE_member
-            .where(obsLE_member >= 0, 0)
-            .where(nan_mask))
-    
-        obsLE_member = transform.inv_boxcox_transform(obsLE_member,
-                                                      offset=offset,
-                                                      lam=lam)
+
+        if inv_transform:
+            obsLE_member = transforms.inv_boxcox_transform(obsLE_member,
+                                                        offset=offset,
+                                                        lam=lam)
+            units = 'mm/day'
+        else:
+            units = 'transformed mm/day'
+
+        modes = ', '.join(mode_list)
+        if forcing_df is not None:
+            forcing = ', '.join(forcings_list)
+        else:
+            forcing = 'No forced response.'
+        
+        if inv_transform:
+            transform = ('synthetic precipitation records have been inverse Box-Cox transformed '
+                            'back to mm/day precipitation records.') 
+        else:
+            transform = 'synthetic precipitation records are still in Box-Cox transformed space.'
 
         obsLE_member = obsLE_member.rename('var')
+        obsLE_member = obsLE_member.assign_attrs(
+            units=units,
+            description='synthetic precipitation record generated via an observational large ensemble',
+            modes=modes,
+            forcing=forcing,
+            transform=transform
+        )
         
         member_savename = save_path + f'obsLE_member{mem + 1:04}.nc'
         obsLE_member.to_netcdf(member_savename)
@@ -141,10 +165,11 @@ def obsLE_pipeline(n_ens_members,
                    end_year,
                    mode_list,
                    lambda_values,
-                   offset_values,
+                   offset,
                    fit_seasonal,
                    block_size,
                    save_path,
+                   inv_transform=True,
                    rng=None,
                    mode_df=None,
                    forcing_df=None,
@@ -176,14 +201,13 @@ def obsLE_pipeline(n_ens_members,
 
     lambda_values: list of numeric
          List containing Box-Cox power paramters to optimize over for the
-         transformation applied to target_da. Values for the transform are 
+         transformation applied to y. Values for the transform are 
          restricted to be positive.
 
-    offset_values: list of numeric
-        List containing offsets to be optimized over for shifting target_da before
-        apply Box-Cox transform. If there are zeros in the data, offset_values 
-        should be positive values such that target_da + offset_values is positive 
-        everywhere. Selecting a single value such as [1e-6] works well in practice.
+    offset: float64
+        Value for shifting y before applying the Box-Cox transform. If there 
+        are zeros in the data, offset should be a positive value such that y + offset 
+        is positive everywhere. Selecting a single value such as [1e-6] works well in practice.
 
     fit_seasonal: list of bools
         True/False values with length = len(mode_list). True specifies that the
@@ -223,16 +247,16 @@ def obsLE_pipeline(n_ens_members,
     else:
         X = ortho_mode_df
     
-    param_ds, _ = optim.optimize_transform(y=y,
+    param_da, _ = optim.optimize_transform(y=y,
                                            X=X,
                                            lambda_values=lambda_values,
-                                           offset_values=offset_values,
+                                           offset=offset,
                                            save_path=save_path)
-    
+
     beta, lm_out = fit.fit_optimized_model(y=y,
                                            X=X,
-                                           lam=param_ds['lam'],
-                                           offset=param_ds['offset'],
+                                           lam=param_da,
+                                           offset=offset,
                                            save_path=save_path)
 
     residuals_da = lm_out['residuals']
@@ -248,8 +272,9 @@ def obsLE_pipeline(n_ens_members,
                 residuals_da=residuals_da,
                 block_size=block_size,
                 surrogate_modes=surrogate_modes,
-                lam=param_ds['lam'],
-                offset=param_ds['offset'],
+                lam=param_da,
+                offset=offset,
                 forcing_df=forcing_df,
+                inv_transform=inv_transform,
                 rng=rng,
                 save_path=save_path)
