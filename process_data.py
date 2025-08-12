@@ -339,7 +339,7 @@ def orthogonalize_modes(mode_df, mode_list=None, save_path=None):
     
     if mode_list is None:
         X = mode_df.values
-        col_names = ['intercept'] + list(mode_df.columns.values)
+        col_names = ['intercept'] + mode_df.columns.to_list()
     else:
         X = mode_df[mode_list].values
         col_names = ['intercept'] + mode_list
