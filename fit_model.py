@@ -66,8 +66,8 @@ def fit_linear_models(y, X):
 
     for i in range(12):
         beta[i, ...], RSS[i], *_ = np.linalg.lstsq(X[I_month[i]],
-                                                    y[I_month[i]],
-                                                    rcond=None)
+                                                   y[I_month[i]],
+                                                   rcond=None)
         fitted_values[i] = (X[I_month[i]] @ beta[i, ...])
         residuals[i] = y[I_month[i]] - (X[I_month[i]] @ beta[i, ...])
 
@@ -133,8 +133,17 @@ def build_model_ds(beta,
     lon_len = lon_coord.shape[0]
     time_len = time_coord.shape[0]
 
-    residuals = residuals.reshape((time_len, L))
-    fitted_values = fitted_values.reshape((time_len, L))
+    # month varies before year, so need to transpose
+    # month and year coordinates before reshaping
+    residuals = (
+        residuals
+        .transpose([1, 0, 2]) # correct ordering for time reshaping
+        .reshape((time_len, L))
+        )
+    fitted_values = (
+        fitted_values
+        .transpose([1, 0, 2]) # correct ordering for time reshaping
+        .reshape((time_len, L)))
     
     beta_data = np.empty((12, p, lat_len, lon_len))
     beta_data.fill(np.nan)
