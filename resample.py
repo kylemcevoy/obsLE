@@ -81,7 +81,7 @@ def iaaft(x, fit_seasonal=False, rng=None):
 
         # Rescale the seasonal standard deviations to match original data
         if fit_seasonal:
-            this_sigma = np.array([np.std(x_new[mo::12]) for mo in range(12)])
+            this_sigma = np.array([np.std(x_new[mo::12], ddof=1) for mo in range(12)])
             scaling = seasonal_sigma / this_sigma
 
             for mo in range(12):
@@ -249,11 +249,9 @@ def bootstrap_residuals(residuals_da, block_size, rng=None):
     # keep the size of original time field
     bootstrap_indx = bootstrap_indx[:n_time]
 
-    boot_residuals = residuals_da[bootstrap_indx, ...]
+    boot_residuals = residuals_da.isel(time=bootstrap_indx)
     boot_residuals = boot_residuals.assign_coords({'time': residuals_da.time})
 
     return boot_residuals
-
-
 
 
