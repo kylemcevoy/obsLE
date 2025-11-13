@@ -164,9 +164,11 @@ def obsLE_pipeline(n_ens_members,
                    start_year,
                    end_year,
                    mode_list,
+                   mv_mode_list,
                    lambda_values,
                    offset,
                    fit_seasonal,
+                   mv_fit_seasonal,
                    block_size,
                    save_path,
                    inv_transform=True,
@@ -235,10 +237,11 @@ def obsLE_pipeline(n_ens_members,
     if mode_df is None and mode_path is None:
         raise ValueError('One of mode_df or mode_path must be specified')
     
+    total_mode_list = mv_mode_list + mode_list
     ortho_mode_df = data_proc.build_ortho_mode_df(mode_df=mode_df,
                                                   start_year=start_year,
                                                   end_year=end_year,
-                                                  mode_list=mode_list,
+                                                  mode_list=total_mode_list,
                                                   save_path=save_path,
                                                   mode_path=mode_path)
 
@@ -262,7 +265,10 @@ def obsLE_pipeline(n_ens_members,
     residuals_da = lm_out['residuals']
 
     surrogate_modes = resample.create_surrogate_modes(ortho_mode_df,
+                                                      mode_list=mode_list,
                                                       fit_seasonal=fit_seasonal,
+                                                      mv_mode_list=mv_mode_list,
+                                                      mv_fit_seasonal=mv_fit_seasonal,
                                                       n_ens_members=n_ens_members,
                                                       rng=rng,
                                                       save_path=save_path)

@@ -100,11 +100,73 @@ def iaaft(x, fit_seasonal=False, rng=None):
 
     return x_new, iter_count
 
+def mv_iaaft(modes, fit_seasonal, rng):
+    mode1 = modes[:, 0]
+    
+    modes_array = modes[:, 1:]
+    modes_sort = np.sort(modes_array, axis=0)
+    
+    fourier_mode1 = np.fft.rfft(mode1)
+    mode1_phi = np.angle(fourier_mode1)
+    
+    mode1_star = iaaft(mode1, fit_seasonal=fit_seasonal[0], rng=rng)[0]
+    fourier_mode1_star = np.fft.rfft(mode1_star)
+    mode1_phi_star = np.angle(fourier_mode1_star)
+    
+    fourier_modes_array = np.fft.rfft(modes_array, axis=0)
+    modes_array_phi = np.angle(fourier_modes_array)
+    modes_array_mod = np.abs(fourier_modes_array)
+    
+    iaaft_modes = np.zeros_like(modes)
+    
+    for i in range(modes_array.shape[1]):
+        modei_star = iaaft(modes_array[:, i], fit_seasonal[i + 1], rng=rng)[0]
+        fourier_modei_star = np.fft.rfft(modei_star)
+        modei_phi_star = np.angle(fourier_modei_star)
+        
+        modei_phi = modes_array_phi[:, i]
+        modei_mod = modes_array_mod[:, i]
+        modei_sort = modes_sort[:, i]
+        
+        Phi_mode1i = mode1_phi - modei_phi
+        Phi_star_mode1i = mode1_phi_star - modei_phi_star
+        
+        modei_phi_shifted = modei_phi_star + Phi_star_mode1i - Phi_mode1i
+        
+        modei_s_iter = np.fft.irfft(modei_mod * np.exp(1j * modei_phi_shifted))
+        modei_sortindex = np.argsort(modei_s_iter)
+        
+        modei_r_iter = np.empty_like(modei_sort)
+        modei_r_iter[modei_sortindex] = modei_sort
+        
+        fourier_modei_star = np.fft.rfft(modei_r_iter)
+        psi_iter = np.angle(fourier_modei_star)
+        s_iter_final = np.fft.irfft(modei_mod * np.exp(1j * psi_iter))
+        
+        if fit_seasonal[i + 1]:
+            modei = modes_array[:, i]
+            modei_reshape = modei.reshape((modei.shape[0] // 12, 12))
+            seasonal_sigma = np.std(modei_reshape, ddof=1, axis=0)
+            
+            s_iter_reshape = s_iter_final.reshape((s_iter_final.shape[0] // 12, 12))
+            current_sigma = s_iter_reshape.std(ddof=1, axis=0)
+            
+            s_iter_scaled = (s_iter_reshape / current_sigma) * seasonal_sigma
+            s_iter_final = s_iter_scaled.reshape((s_iter_final.shape[0]))
+        
+        iaaft_modes[:, i + 1] = s_iter_final
+
+    iaaft_modes[:, 0] = mode1_star
+    
+    return iaaft_modes
+
 def create_surrogate_modes(ortho_mode_df,
                            fit_seasonal,
+                           mv_fit_seasonal,
                            n_ens_members,
                            mode_path=None,
                            mode_list=None,
+                           mv_mode_list=None,
                            max_iters=np.inf,
                            rng=None,
                            save_path=None):
@@ -158,40 +220,80 @@ def create_surrogate_modes(ortho_mode_df,
         ortho_mode_df = data_proc.orthogonalize_modes(mode_df, mode_list)
         data_proc.check_mode(mode_df)
     
-    data_proc.check_ortho_mode(ortho_mode_df)
+    #data_proc.check_ortho_mode(ortho_mode_df)
+    
+    total_mode_list = []
+    
+    if mv_mode_list is not None:
+        multivariate_modes = True
+        mv_mode_subset = ortho_mode_df[mv_mode_list].values
+        n_mv_modes = mv_mode_subset.shape[1]
+        total_mode_list = total_mode_list + mv_mode_list
+    else:
+        multivariate_modes = False
+        n_mv_modes = 0
     
     if mode_list is not None:
+        univariate_modes = True
         mode_subset = ortho_mode_df[mode_list].values
+        n_uv_modes = mode_subset.shape[1]
+        total_mode_list = total_mode_list + mode_list
     else:
+        univariate_modes = False
+        n_uv_modes = 0
+    
+    if (not multivariate_modes) & (not univariate_modes):
         mode_subset = ortho_mode_df.drop('intercept', axis=1)
         mode_list = mode_subset.columns.to_list()
         mode_subset = mode_subset.values
-        
+        n_uv_modes = mode_subset.shape[1]
+        n_mv_modes = 0
+        total_mode_list = mode_list
+    
     n_time = mode_subset.shape[0]
-    n_modes = mode_subset.shape[1]
+    n_modes = n_mv_modes + n_uv_modes
     time_indx = ortho_mode_df.index
 
     modes_out = np.empty((n_ens_members, n_modes, n_time))
 
-    for k in range(n_ens_members):
-        for j in range(n_modes):
-            iter_out = 0
-            total_iters = 0
-            while iter_out == 0:
-                surrogate_ts, iter_out = iaaft(mode_subset[:, j],
-                                               rng=rng,
-                                               fit_seasonal=fit_seasonal[j])
-                total_iters += 1
-                if total_iters > max_iters:
-                    raise RuntimeError('The IAAFT while loop exceeded max_iters.')
-                
-            modes_out[k, j] = surrogate_ts
+    if multivariate_modes:
+        for k in range(n_ens_members):
+            surrogates_np = mv_iaaft(mv_mode_subset, 
+                                    fit_seasonal=mv_fit_seasonal,
+                                    rng=rng)
+            modes_out[k, 0:n_mv_modes] = surrogates_np.transpose()
+            for j in range(n_uv_modes):
+                iter_out = 0
+                total_iters = 0
+                while iter_out == 0:
+                    surrogate_ts, iter_out = iaaft(mode_subset[:, j],
+                                                   rng=rng,
+                                                   fit_seasonal=fit_seasonal[j])
+                    total_iters += 1
+                    if total_iters > max_iters:
+                        raise RuntimeError('The IAAFT while loop exceeded max_iters.')
+                    
+                    modes_out[k, n_mv_modes + j] = surrogate_ts
+    else:
+        for k in range(n_ens_members):
+            for j in range(n_modes):
+                iter_out = 0
+                total_iters = 0
+                while iter_out == 0:
+                    surrogate_ts, iter_out = iaaft(mode_subset[:, j],
+                                                rng=rng,
+                                                fit_seasonal=fit_seasonal[j])
+                    total_iters += 1
+                    if total_iters > max_iters:
+                        raise RuntimeError('The IAAFT while loop exceeded max_iters.')
+                    
+                modes_out[k, j] = surrogate_ts
 
     dim_tuple = ('ens_member', 'time')
     # xarray Dataset constructor uses a tuple of (dimensions, ndarray)
     # to construct variables
     surrogate_list = [(dim_tuple, modes_out[:, i]) for i in range(n_modes)]
-    var_dict = dict(zip(mode_list, surrogate_list))
+    var_dict = dict(zip(total_mode_list, surrogate_list))
     
     surrogate_ds = xr.Dataset(data_vars=var_dict,
                               coords={'ens_member': np.arange(n_ens_members),
