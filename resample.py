@@ -180,30 +180,37 @@ def create_surrogate_modes(ortho_mode_df,
     mode_path : str
         Path to the netCDF file where the climate modes are saved. See
         process_climate_modes() for details.
+        
     mode_list: list of strings
         list of variable names for which to create surrogate modes.
+        
     fit_seasonal: list of bools
         Must match the length of mode_list. True/False values give
         whether to scale the resulting time series to match the monthly
-        cycle of standard deviations in the observed modes.  
+        cycle of standard deviations in the observed modes.
+        
+    mv_fit_sesonal: list of bools
+        Must match the length of mv_mode_list. True/False values give
+        whether to scale the resulting time series to match the monthly
+        cycle of standard deviations in the observed modes.
+        
     n_ens_members : int
         Number of mode sets to create
+        
     max_iters: numeric or np.inf
-        gives a maximum number of loops to perform before aborting IAAFT sampling.
+        Gives a maximum number of loops to perform before aborting IAAFT 
+        sampling.
+        
     rng : Numpy random Generator
         Like np.random.default_rng()
+        
     save_path : str
         Path to the directory for saving the modes. Nothing is saved if set to None.
         
-
     Returns
     -------
-    modes_out : numpy.ndarray
-        Array (n_ens_members x n_modes x n_time) of surrogate time series
-    mode_list : list
-        Returns the input list of variable names
-    time_indx : pd.DateTimeIndex
-        The time index for the modes.
+    surrogate_ds: xr.DataSet (dims: time)
+        Dataset containing the synthetic modes as variables. Indexed by time.
     """
 
     if rng is None:
@@ -281,8 +288,8 @@ def create_surrogate_modes(ortho_mode_df,
                 total_iters = 0
                 while iter_out == 0:
                     surrogate_ts, iter_out = iaaft(mode_subset[:, j],
-                                                rng=rng,
-                                                fit_seasonal=fit_seasonal[j])
+                                                   rng=rng,
+                                                   fit_seasonal=fit_seasonal[j])
                     total_iters += 1
                     if total_iters > max_iters:
                         raise RuntimeError('The IAAFT while loop exceeded max_iters.')
@@ -340,7 +347,7 @@ def bootstrap_residuals(residuals_da, block_size, rng=None):
     num_starts = np.ceil(n_time / block_size).astype('int')
 
     # create block starting points for each year
-    block_starts = np.arange(n_time, step=12)
+    block_starts = np.arange(stop=n_time, step=12)
 
     rand_blocks = rng.choice(block_starts, size=num_starts, replace=True)
 

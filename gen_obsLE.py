@@ -19,16 +19,17 @@ def build_obsLE(beta_ds,
                 forcing_df=None,
                 rng=None):
     """
-    Build Observational Large Ensemble (Obs-LE) members from the fitted regression 
-    coefficients and the residuals.
+    Build Observational Large Ensemble (Obs-LE) members from the fitted 
+    regression coefficients, the residuals, and the surrogate modes.
 
     Parameters
     ----------
     beta_ds : xr.Dataset, dims: (month, lat, lon)
         Dataset containing the fitted beta coefficients from the linear models
-        for each climate mode fitted for each month and location. These coefficients
-        are held fixed in the Obs-LE. See fit_model.fit_linear_model() and 
-        fit_model.build_model_ds() for additional details.
+        for each climate mode fitted for each month and location. These 
+        coefficients are held fixed in the Obs-LE. See 
+        fit_model.fit_linear_model() and fit_model.build_model_ds() for 
+        additional details.
         
     residuals_da : xr.DataArray, dims: (time, lat, lon)
         DataArray containing the residuals from the fitted linear models.
@@ -44,19 +45,26 @@ def build_obsLE(beta_ds,
         for more details. 
 
     lam : xr.DataArray, dims: (month, lat, lon)
-        DataArray containing the power paramter, lambda, of the Box-Cox transform.
-        Used for transforming the newly generated values back into the original
-        precipitation space. See transform.inv_boxcox_transform() for details.
+        DataArray containing the power paramter, lambda, of the Box-Cox 
+        transform. Used for transforming the newly generated values back into 
+        the original precipitation space. See transform.inv_boxcox_transform() 
+        for details.
 
-    offset : xr.DataArray, dims: (month, lat, lon)
-        DataArray containing the offset parameter of the Box-Cox transform. Used
-        for transforming the newly generated values back into the original 
-        precipitation space. See transform.inv_boxcox_transform() for details.
+    offset: float64
+        Value for shifting y before applying the Box-Cox transform. If there 
+        are zeros in the data, offset should be a positive value such that 
+        y + offset is positive everywhere. Selecting a small value such as 
+        1e-6 works well in practice.
 
     save_path : str
         Path to the directory for saving the outputted ensemble members. Directory
         name should end in /. Members are saved in netCDF file format at:
         save_path + 'obsLE_member{member #}.nc'.
+        
+    inv_transform: bool
+        If True, the synthetic spatiotemporal field  is inverse transformed back
+        into the original, untransformed units before returning. If False, the
+        synthetic fields are returned in transformed space.
 
     forcing_df : pd.DataFrame, dims: (n_time, n_forcing_ts)
         DataFrame containing the forcing time series as columns. Names should match
@@ -98,7 +106,6 @@ def build_obsLE(beta_ds,
 
         for forcing in forcings_list:
             beta_forcing = beta_ds[forcing].loc[{'month': month_seq}]
-            # add axes to the forcing for numpy broadcasting with lon, lat dimensions
             forcing_ts = forcing_df[forcing].to_xarray()
             force_field = beta_forcing * forcing_ts
             base_mean_field = base_mean_field + force_field
@@ -141,15 +148,19 @@ def build_obsLE(beta_ds,
             forcing = 'No forced response.'
         
         if inv_transform:
-            transform = ('synthetic precipitation records have been inverse Box-Cox transformed '
-                            'back to mm/day precipitation records.') 
+            transform = ('synthetic precipitation records have been' 
+                         'inverse Box-Cox transformed '
+                         'back to mm/day precipitation records.') 
         else:
-            transform = 'synthetic precipitation records are still in Box-Cox transformed space.'
+            transform = ('synthetic precipitation records are still in'
+                         'Box-Cox transformed space.')
 
+        descrip = ('synthetic precipitation record generated via an'
+                   ' observational large ensemble')
         obsLE_member = obsLE_member.rename('var')
         obsLE_member = obsLE_member.assign_attrs(
             units=units,
-            description='synthetic precipitation record generated via an observational large ensemble',
+            description=descrip,
             modes=modes,
             forcing=forcing,
             transform=transform
@@ -186,12 +197,6 @@ def obsLE_pipeline(n_ens_members,
     y, xr.DataArray, dims: (time, lat, lon)
         DataArray containing the target variable for building the Obs-LE.
 
-    mode_df: pd.DataFrame
-        DataFrame containing the climate modes as columns. The index should be 
-        a pd.datetime64 index. Rows should contain monthly observations of the
-        climate modes. If None, imports modes using 
-        process_data.process_climate_modes().
-
     start_year: str
         First year to include in the Obs-LE. String with four digit year.
 
@@ -199,33 +204,55 @@ def obsLE_pipeline(n_ens_members,
         Last year to include in the Obs-LE. String with four digit year.
 
     mode_list: list of str
-        list containing the names of the climate modes to include.
+        list containing the names of the climate modes to be included in the
+        model that will *not* have multivariate IAAFT applied to generate
+        synthetic modes. 
+        
+    mv_mode_list: list of str
+        list containing the names of the climate modes that to be included in
+        the model that *will* have multivariate IAAFT applied to generate
+        synthetic modes.
 
     lambda_values: list of numeric
          List containing Box-Cox power paramters to optimize over for the
          transformation applied to y. Values for the transform are 
-         restricted to be positive.
+         restricted to be positive. 
 
     offset: float64
         Value for shifting y before applying the Box-Cox transform. If there 
-        are zeros in the data, offset should be a positive value such that y + offset 
-        is positive everywhere. Selecting a single value such as [1e-6] works well in practice.
+        are zeros in the data, offset should be a positive value such that 
+        y + offset is positive everywhere. Selecting a small value such as 
+        1e-6 works well in practice.
 
     fit_seasonal: list of bools
         True/False values with length = len(mode_list). True specifies that the
-        seasonal cycle in the variance should be maintained in the surrogate modes.
-        For most climate modes, fit_seasonal should be True, since there can be
-        large differences in variance between months. The trade-off is an increased
-        number of iterations before IAAFT converges.
+        seasonal cycle in the variance should be maintained in the surrogate 
+        modes. For most climate modes, fit_seasonal should be True, since there 
+        can be large differences in variance between months. The trade-off is an
+        increased number of iterations before IAAFT converges.
+        
+    mv_fit_seasonal: list of bools
+        True/False values with length = len(mv_mode_list). True specifies that 
+        the seasonal cycle in the variance should be maintained in the surrogate 
+        modes. For most climate modes, fit_seasonal should be True, since there 
+        can be large differences in variance between months. The trade-off is an
+        increased number of iterations before IAAFT converges.
 
     block_size: int
-        The length of time blocks, in months, to use for the moving block bootstrap.
-        Must be divisible by 12, so that only whole years are included.
+        The length of time blocks, in months, to use for the moving block 
+        bootstrap. Must be divisible by 12, so that only whole years are 
+        included.
 
     save_path: str
         Path to the directory in which to save the outputted Obs-LE members and 
         component files. Should end in /. Individual members are saved as 
         netCDF files at: save_path + 'obsLE_member{member #}.nc'
+        
+    mode_df: pd.DataFrame
+        DataFrame containing the climate modes as columns. The index should be 
+        a pd.datetime64 index. Rows should contain monthly observations of the
+        climate modes. If None, imports modes using 
+        process_data.process_climate_modes().
 
     mode_path: str
         path to the climate modes
