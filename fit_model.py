@@ -224,16 +224,16 @@ def fit_optimized_model(y,
         build_model_ds() for additional details.
     """
     
-    transformed_target = transform.boxcox_transform(y,
-                                                    lam=lam,
-                                                    offset=offset)
+    transformed_y = transform.boxcox_transform(y,
+                                               lam=lam,
+                                               offset=offset)
 
-    nan_mask = ~transformed_target.isnull().all(dim='time')
+    nan_mask = ~transformed_y.isnull().all(dim='time')
 
     # this expects time to be the first dimension
-    transformed_values = transformed_target.values[:, nan_mask]
+    transformed_np = transformed_y.values[:, nan_mask]
 
-    beta, RSS, residuals, fitted_values = fit_linear_models(y=transformed_values,
+    beta, RSS, residuals, fitted_values = fit_linear_models(y=transformed_np,
                                                             X=X)
 
     beta_ds, lm_out_ds = build_model_ds(beta=beta,

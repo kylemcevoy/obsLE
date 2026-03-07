@@ -12,10 +12,11 @@ def build_obsLE(beta_ds,
                 residuals_da,
                 block_size,
                 surrogate_modes,
-                lam,
-                offset,
+                var_name,
                 save_path,
-                inv_transform=True,
+                transform=True,
+                lam=None,
+                offset=None,
                 forcing_df=None,
                 rng=None):
     """
@@ -44,6 +45,19 @@ def build_obsLE(beta_ds,
         variables. See resample.iaaft() and resample.create_surrogate_modes() 
         for more details. 
 
+    var_name: str
+        Name of the input variable.
+        
+    save_path : str
+        Path to the directory for saving the outputted ensemble members. Directory
+        name should end in /. Members are saved in netCDF file format at:
+        save_path + 'obsLE_member{member #}.nc'.
+        
+    transform: bool
+        If True, the recombined fields are inverse Box-Cox transformed using the
+        lam and offset values. If False, the input values are assumed to be
+        in untransformed space and are not inverse transformed.
+        
     lam : xr.DataArray, dims: (month, lat, lon)
         DataArray containing the power paramter, lambda, of the Box-Cox 
         transform. Used for transforming the newly generated values back into 
@@ -55,16 +69,6 @@ def build_obsLE(beta_ds,
         are zeros in the data, offset should be a positive value such that 
         y + offset is positive everywhere. Selecting a small value such as 
         1e-6 works well in practice.
-
-    save_path : str
-        Path to the directory for saving the outputted ensemble members. Directory
-        name should end in /. Members are saved in netCDF file format at:
-        save_path + 'obsLE_member{member #}.nc'.
-        
-    inv_transform: bool
-        If True, the synthetic spatiotemporal field  is inverse transformed back
-        into the original, untransformed units before returning. If False, the
-        synthetic fields are returned in transformed space.
 
     forcing_df : pd.DataFrame, dims: (n_time, n_forcing_ts)
         DataFrame containing the forcing time series as columns. Names should match
@@ -86,7 +90,7 @@ def build_obsLE(beta_ds,
 
     mode_list = list(surrogate_modes.data_vars.keys())
 
-    ens_members = surrogate_modes['ens_member'].values
+    ens_mems = surrogate_modes['ens_mem'].values
     month_seq = residuals_da['time.month']
 
     base_mean_field = beta_ds['intercept'].loc[{'month': month_seq}]
@@ -110,16 +114,14 @@ def build_obsLE(beta_ds,
             force_field = beta_forcing * forcing_ts
             base_mean_field = base_mean_field + force_field
 
-    for mem in ens_members:
+    for mem in ens_mems:
         bootstrap_residuals = resample.bootstrap_residuals(residuals_da,
                                                            block_size=block_size,
                                                            rng=rng)
         
-        surrogate_member = (
-            surrogate_modes
-                .sel(ens_member=mem)
-                .drop_vars('ens_member')
-            )
+        surrogate_member = (surrogate_modes.sel(ens_mem=mem)
+                .drop_vars('ens_mem')
+                )
 
         mean_field = base_mean_field
 
@@ -133,13 +135,10 @@ def build_obsLE(beta_ds,
 
         obsLE_member = mean_field + bootstrap_residuals
 
-        if inv_transform:
+        if transform:
             obsLE_member = transforms.inv_boxcox_transform(obsLE_member,
                                                         offset=offset,
                                                         lam=lam)
-            units = 'mm/day'
-        else:
-            units = 'transformed mm/day'
 
         modes = ', '.join(mode_list)
         if forcing_df is not None:
@@ -147,26 +146,23 @@ def build_obsLE(beta_ds,
         else:
             forcing = 'No forced response.'
         
-        if inv_transform:
-            transform = ('synthetic precipitation records have been' 
-                         'inverse Box-Cox transformed '
-                         'back to mm/day precipitation records.') 
+        if transform:
+            transf_attr = ('The synthetic-LE was created using an inverse '
+                         'Box-Cox transform.') 
         else:
-            transform = ('synthetic precipitation records are still in'
-                         'Box-Cox transformed space.')
+            transf_attr = ('The synthetic-LE was created with no transform.')
 
-        descrip = ('synthetic precipitation record generated via an'
+        descrip = ('synthetic {var_name} record generated via an'
                    ' observational large ensemble')
-        obsLE_member = obsLE_member.rename('var')
+        obsLE_member = obsLE_member.rename(var_name)
         obsLE_member = obsLE_member.assign_attrs(
-            units=units,
             description=descrip,
             modes=modes,
             forcing=forcing,
-            transform=transform
+            transform=transf_attr
         )
         
-        member_savename = save_path + f'obsLE_member{mem + 1:04}.nc'
+        member_savename = save_path + f'obsLE_member{mem:04}.nc'
         obsLE_member.to_netcdf(member_savename)
 
 
@@ -176,13 +172,13 @@ def obsLE_pipeline(n_ens_members,
                    end_year,
                    mode_list,
                    mv_mode_list,
-                   lambda_values,
-                   offset,
                    fit_seasonal,
                    mv_fit_seasonal,
                    block_size,
                    save_path,
-                   inv_transform=True,
+                   transform=True,
+                   lam=None,
+                   offset=None,
                    rng=None,
                    mode_df=None,
                    forcing_df=None,
@@ -213,17 +209,6 @@ def obsLE_pipeline(n_ens_members,
         the model that *will* have multivariate IAAFT applied to generate
         synthetic modes.
 
-    lambda_values: list of numeric
-         List containing Box-Cox power paramters to optimize over for the
-         transformation applied to y. Values for the transform are 
-         restricted to be positive. 
-
-    offset: float64
-        Value for shifting y before applying the Box-Cox transform. If there 
-        are zeros in the data, offset should be a positive value such that 
-        y + offset is positive everywhere. Selecting a small value such as 
-        1e-6 works well in practice.
-
     fit_seasonal: list of bools
         True/False values with length = len(mode_list). True specifies that the
         seasonal cycle in the variance should be maintained in the surrogate 
@@ -247,6 +232,22 @@ def obsLE_pipeline(n_ens_members,
         Path to the directory in which to save the outputted Obs-LE members and 
         component files. Should end in /. Individual members are saved as 
         netCDF files at: save_path + 'obsLE_member{member #}.nc'
+    
+    transform: bool
+        If True, the linear model is fit and the resampling is done in Box-Cox
+        transformed space. Use potential lambda values supplied in lam and
+        an offset supplied in offset.
+    
+    lam: list of numeric
+        List containing Box-Cox power paramters to optimize over for the
+        transformation applied to y. Values for the transform are 
+        restricted to be positive. If transform=False, a list must be passed.
+
+    offset: float64
+        Value for shifting y before applying the Box-Cox transform. If there 
+        are zeros in the data, offset should be a positive value such that 
+        y + offset is positive everywhere. Selecting a small value such as 
+        1e-6 works well in practice. If transform=False, a value must be passed.
         
     mode_df: pd.DataFrame
         DataFrame containing the climate modes as columns. The index should be 
@@ -264,6 +265,11 @@ def obsLE_pipeline(n_ens_members,
     if mode_df is None and mode_path is None:
         raise ValueError('One of mode_df or mode_path must be specified')
     
+    if y.name is not None:
+        var_name = y.name
+    else:
+        var_name = 'var'
+    
     total_mode_list = mv_mode_list + mode_list
     ortho_mode_df = data_proc.build_ortho_mode_df(mode_df=mode_df,
                                                   start_year=start_year,
@@ -277,17 +283,34 @@ def obsLE_pipeline(n_ens_members,
     else:
         X = ortho_mode_df
     
-    param_da, _ = optim.optimize_transform(y=y,
-                                           X=X,
-                                           lambda_values=lambda_values,
-                                           offset=offset,
-                                           save_path=save_path)
+    if transform:
+        param_da, _ = optim.optimize_transform(y=y,
+                                               X=X,
+                                               lambda_values=lam,
+                                               offset=offset,
+                                               save_path=save_path)
 
-    beta, lm_out = fit.fit_optimized_model(y=y,
-                                           X=X,
-                                           lam=param_da,
-                                           offset=offset,
-                                           save_path=save_path)
+        beta, lm_out = fit.fit_optimized_model(y=y,
+                                               X=X,
+                                               lam=param_da,
+                                               offset=offset,
+                                               save_path=save_path)
+    else:
+        beta, RSS, residuals, fitted_values = fit.fit_linear_models(y, X)
+        
+        nan_mask = ~y.isnull().all(dim='time')
+        
+        beta, lm_out = fit.build_model_ds(beta=beta,
+                                          var_names=X.columns.to_list(),
+                                          RSS=RSS,
+                                          residuals=residuals,
+                                          fitted_values=fitted_values,
+                                          nan_mask=nan_mask,
+                                          coords=y.coords)
+        
+        if save_path is not None:
+            beta.to_netcdf(save_path + 'beta.nc')
+            lm_out.to_netcdf(save_path + 'regression_output.nc')
 
     residuals_da = lm_out['residuals']
 
@@ -301,13 +324,14 @@ def obsLE_pipeline(n_ens_members,
                                                       save_path=save_path)
 
     
-    build_obsLE(beta_ds=beta, 
+    build_obsLE(beta_ds=beta,
                 residuals_da=residuals_da,
                 block_size=block_size,
                 surrogate_modes=surrogate_modes,
                 lam=param_da,
                 offset=offset,
                 forcing_df=forcing_df,
-                inv_transform=inv_transform,
+                var_name=var_name,
+                transform=transform,
                 rng=rng,
                 save_path=save_path)

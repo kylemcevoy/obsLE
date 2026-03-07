@@ -296,14 +296,14 @@ def create_surrogate_modes(ortho_mode_df,
                     
                 modes_out[k, j] = surrogate_ts
 
-    dim_tuple = ('ens_member', 'time')
+    dim_tuple = ('ens_mem', 'time')
     # xarray Dataset constructor uses a tuple of (dimensions, ndarray)
     # to construct variables
     surrogate_list = [(dim_tuple, modes_out[:, i]) for i in range(n_modes)]
     var_dict = dict(zip(total_mode_list, surrogate_list))
     
     surrogate_ds = xr.Dataset(data_vars=var_dict,
-                              coords={'ens_member': np.arange(n_ens_members),
+                              coords={'ens_mem': np.arange(1, n_ens_members + 1),
                                       'time': time_indx})
 
     if save_path is not None:
