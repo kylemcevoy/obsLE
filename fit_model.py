@@ -187,7 +187,7 @@ def fit_optimized_model(y,
                         lam,
                         offset,
                         model_mode_list=None,
-                        save_path=None):
+                        save_dir=None):
     """Wrapper function that transforms y by the optimized
     transform. Then fits the linear regression model onto the orthogonalized 
     climate modes.
@@ -211,10 +211,10 @@ def fit_optimized_model(y,
         intercept, as it will be added to the list by default. If None, all modes 
         from X are used.
 
-    save_path: str or None
+    save_dir: str or None
         path to the directory to save the output. The directory should end in /.
-        The outputs will be saved to save_path + beta.nc and 
-        save_path + regression_output.nc, respectively. If None, nothing is saved.
+        The outputs will be saved to save_dir + beta.nc and 
+        save_dir + regression_output.nc, respectively. If None, nothing is saved.
 
     Returns
     -------
@@ -244,8 +244,8 @@ def fit_optimized_model(y,
                                         nan_mask=nan_mask,
                                         coords=y.coords)
 
-    if save_path is not None:
-        beta_ds.to_netcdf(save_path + 'beta.nc')
-        lm_out_ds.to_netcdf(save_path + 'regression_output.nc')
+    if save_dir is not None:
+        beta_ds.to_netcdf(save_dir + 'beta.nc')
+        lm_out_ds.to_netcdf(save_dir + 'regression_output.nc')
 
     return beta_ds, lm_out_ds

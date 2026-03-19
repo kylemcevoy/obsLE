@@ -8,7 +8,7 @@ import warnings
 def process_climate_modes(mode_path,
                           start_year='1920',
                           end_year='2020',
-                          save_path=None):
+                          save_dir=None):
     """Process the climate mode files into a single data object
     containing monthly climate mode values.
 
@@ -23,11 +23,11 @@ def process_climate_modes(mode_path,
         four digit string for last year of data to include
         in the climate mode output. The year should have all 12 months
         of data. Value should be <= 2020.
-    save_path : str
+    save_dir : str
         Path to the directory for saving the output. The string should end in / after
         the directory name.
         If None, nothing will be saved. The pd.DataFrame output is converted to an
-        xr.DataSet before saving, and is saved at save_path + "climate_mode.nc".
+        xr.DataSet before saving, and is saved at save_dir + "climate_mode.nc".
 
     Returns
     ---------
@@ -148,16 +148,16 @@ def process_climate_modes(mode_path,
     
     mode_df = mode_df.loc[slice(start_year, end_year)]
 
-    if save_path is not None:
+    if save_dir is not None:
         mode_ds = mode_df.to_xarray()
         description = ('dataset containing time series of climate modes for the regression model.'
         + 'Created by the process_climate_modes() function in data_processing.py')
         mode_ds.attrs['description'] = description
-        mode_ds.to_netcdf(save_path + 'climate_modes.nc')
+        mode_ds.to_netcdf(save_dir + 'climate_modes.nc')
 
     return mode_df
 
-def preprocess_so2(hist_files, future_files, save_path=None):
+def preprocess_so2(hist_files, future_files, save_dir=None):
     
     import regionmask
     import cftime
@@ -213,15 +213,15 @@ def preprocess_so2(hist_files, future_files, save_path=None):
                                                   'process_data.py'))
     so2_mean = so2_mean.compute()
 
-    if save_path is not None:
-        so2_mean.to_netcdf(save_path + 'conus_mean_so2.nc')
+    if save_dir is not None:
+        so2_mean.to_netcdf(save_dir + 'conus_mean_so2.nc')
 
     return(so2_mean)
 
 def process_forcings(forcings_path,
                      start_year='1920',
                      end_year='2020',
-                     save_path=None):
+                     save_dir=None):
 
     var_fnames = {'ico2_log': 'ico2_log.nc',
                  'so2': 'conus_mean_so2.nc'}
@@ -255,13 +255,13 @@ def process_forcings(forcings_path,
 
     forcing_df.index.rename('time', inplace=True)
 
-    if save_path is not None:
+    if save_dir is not None:
         forcing_ds = forcing_df.to_xarray()
         description = ('dataset containing time series of climate forcings for the'
                       'regression model. Created by processing_forcings() function'
                       'in data_processing.py')
         forcing_ds.attrs['description'] = description
-        forcing_ds.to_netcdf(save_path + 'forcings.nc')
+        forcing_ds.to_netcdf(save_dir + 'forcings.nc')
 
     return forcing_df
 
@@ -316,7 +316,7 @@ def find_ortho_basis(mode_array):
             ortho_basis = np.hstack([ortho_basis, ortho_mode])
     return ortho_basis
 
-def orthogonalize_modes(mode_df, mode_list=None, save_path=None):
+def orthogonalize_modes(mode_df, save_dir=None):
     """Sequentially orthogonalize a DataFrame of climate modes
         using Gram-Schmidt orthogonalization,
 
@@ -325,8 +325,10 @@ def orthogonalize_modes(mode_df, mode_list=None, save_path=None):
     mode_df : pd.DataFrame
         DataFrame containing monthly observations of climate modes
         with a pd.DateTime index. As outputted by process_climate_modes().
-    mode_list : list of strings
-        list of variable names from mode_df to subset and sequentially orthogonalize.
+        
+    save_dir : str
+        Path to the directory in which to save the orthogonalized modes. The
+        path should end in a trailing slash.
 
     Returns
     -------
@@ -337,13 +339,10 @@ def orthogonalize_modes(mode_df, mode_list=None, save_path=None):
         is orthogonal to all preceding columns (including the intercept).
     """
     
-    if mode_list is None:
-        X = mode_df.values
-        col_names = ['intercept'] + mode_df.columns.to_list()
-    else:
-        X = mode_df[mode_list].values
-        col_names = ['intercept'] + mode_list
-        
+    X = mode_df.values
+    col_names = ['intercept'] + mode_df.columns.to_list()
+    
+    # add intercept
     X = np.hstack([np.ones((X.shape[0], 1)), X])
 
     X_orth = find_ortho_basis(X)
@@ -355,129 +354,69 @@ def orthogonalize_modes(mode_df, mode_list=None, save_path=None):
                                   index=mode_df.index,
                                   columns=col_names)
 
-    if save_path is not None:
+    if save_dir is not None:
         ortho_modes_ds = ortho_modes_df.to_xarray()
         description = ('dataset containing time series of climate modes that'
-                       'have been orthogonalized. Created by the '
-                       'orthogonalize_modes() function in data_processing.py')
+                       'have been orthogonalized and standardized. Created by '
+                       'the orthogonalize_modes() function in '
+                       'data_processing.py')
         ortho_modes_ds.attrs['description'] = description
-        ortho_modes_ds.to_netcdf(save_path + 'ortho_modes.nc')
+        ortho_modes_ds.to_netcdf(save_dir + 'ortho_modes.nc')
 
     return ortho_modes_df
 
-def build_ortho_mode_df(mode_df,
-                        start_year,
-                        end_year,
-                        mode_list,
-                        save_path=None,
-                        mode_path=None):
-    """Loads the climate mode files processes the data and outputs a pandas
-    DataFrame that contains the orthogonal modes.
+def check_y(y):
+    """This function does input checking on the response variable xr.DataArray.
 
     Parameters
     ----------
-    mode_df: pd.DataFrame
-        DataFrame containing the climate modes as columns. The rows should contain
-        monthly observations of the climate modes. The index should be a 
-        pd.datetime64 index.
-        
-    start_year : str/int
-        four digit string/int for the first year of data to include
-        in the climate mode output. Value should be >= 1920
-        
-    end_year : str/int
-        four digit string/int for last year of data to include
-        in the climate mode output. Value should be <= 2020.
-        
-    mode_list : list of str
-        the variable names to include in the output DataFrame. 
-        
-    save_path : str
-        Path to the directory for saving the output. The string should end in / after
-        the directory name.
-        If None, nothing will be saved. The pd.DataFrame output is converted to an
-        xr.DataSet before saving, and is saved at save_path + "ortho_mode.nc".
-        
-    mode_path : str
-        Path to the directory containing the climate mode files. Only used if
-        mode_df=None. See process_climate_modes() for the expected files. 
-
-    Returns
-    -------
-    ortho_mode_df : pd.DataFrame
-        the columns contain the orthogonalized climate modes, with the first
-        column containing an intercept (all ones). The shape of the output is
-        (12 * (#years)) by (1 + (# modes)).
-    """
-    
-    if mode_df is None:
-        mode_df = process_climate_modes(mode_path=mode_path,
-                                        start_year=start_year,
-                                        end_year=end_year,
-                                        save_path=save_path)
-
-    check_mode(mode_df)
-
-    ortho_mode_df = orthogonalize_modes(mode_df=mode_df,
-                                        mode_list=mode_list,
-                                        save_path=save_path)
-    
-    check_ortho_mode(ortho_mode_df)
-
-    return ortho_mode_df
-
-def check_target(target_da):
-    """This function does input checking on the target variable xr.DataArray.
-
-    Parameters
-    ----------
-    target_da : xr.DataArray
-        Object containing the target variable for the Obs-LE. target_da should have
+    y : xr.DataArray
+        Object containing the response variable for the Obs-LE. y should have
         dimensions (time, lat, lon). time should have data type pd.datetime64. 
     
     Returns
     --------
-    target_da : xr.DataArray
+    y : xr.DataArray
         This function will rename the dimensions latitude/longitude to lat/lon if
         they are found in the data. It will also use transpose to reorder the
         dimensions to (time, lat, lon).
     """
     
-    if not isinstance(target_da, xr.DataArray):
-        raise ValueError('target_da is not an xr.DataArray.')
-    coords = target_da.coords
+    if not isinstance(y, xr.DataArray):
+        raise ValueError('y is not an xr.DataArray.')
+    coords = y.coords
 
     if 'time' not in coords:
-        raise ValueError('target_da does not have a time coord. '
+        raise ValueError('y does not have a time coord. '
                         'time should be datetime64 coord with the same '
                          'months as ortho_mode_df.index.')
 
-    if not pd.api.types.is_datetime64_dtype(target_da.time):
-        raise ValueError('target_da.time should be a datetime64 type.')
+    if not pd.api.types.is_datetime64_dtype(y.time):
+        raise ValueError('y.time should be a datetime64 type.')
 
-    mount_counts = np.unique(target_da['time.month'], return_counts=True)[1]
+    month_counts = np.unique(y['time.month'], return_counts=True)[1]
 
-    if any(mount_counts != mount_counts[0]):
-        raise ValueError('Only whole years should be included in target_da, '
+    if any(month_counts != month_counts[0]):
+        raise ValueError('Only whole years should be included in y, '
                         'so each month should have the same number of occurences.')
 
     if 'lat' not in coords:
         if 'latitude' in coords:
-            target_da = target_da.rename({'latitude': 'lat'})
+            y = y.rename({'latitude': 'lat'})
         else:
-            raise ValueError('target_da must have a latitude coordinate. ' 
+            raise ValueError('y must have a latitude coordinate. ' 
                              'Preferably named lat.')
 
     if 'lon' not in coords:
         if 'longitude' in coords:
-            target_da = target_da.rename({'longitude': 'lon'})
+            y = y.rename({'longitude': 'lon'})
         else:
-            raise ValueError('target_da must have a longitude coordinate. ' 
+            raise ValueError('y must have a longitude coordinate. ' 
                              'Preferably named lon.')
 
-    target_da = target_da.transpose('time', 'lat', 'lon')
+    y = y.transpose('time', 'lat', 'lon')
 
-    return target_da
+    return y
 
 def check_mode(mode_df):
     """Input checking for the DataFrame of climate modes.
@@ -498,9 +437,9 @@ def check_mode(mode_df):
     if not pd.api.types.is_datetime64_dtype(mode_df.index):
         raise ValueError('mode_df.index should be a datetime64 type.')
     
-    mount_counts = np.unique(mode_df.index.month, return_counts=True)[1]
+    month_counts = np.unique(mode_df.index.month, return_counts=True)[1]
 
-    if any(mount_counts != mount_counts[0]):
+    if any(month_counts != month_counts[0]):
         raise ValueError('Only whole years should be included in mode_df, '
                         'so each month should have the same number of occurences.')
 
@@ -530,9 +469,9 @@ def check_ortho_mode(ortho_mode_df):
     if not pd.api.types.is_datetime64_dtype(ortho_mode_df.index):
         raise ValueError('ortho_mode_df.index should be a datetime64 type.')
     
-    mount_counts = np.unique(ortho_mode_df.index.month, return_counts=True)[1]
+    month_counts = np.unique(ortho_mode_df.index.month, return_counts=True)[1]
 
-    if any(mount_counts != mount_counts[0]):
+    if any(month_counts != month_counts[0]):
         raise ValueError('Only whole years should be included in mode_df, '
                         'so each month should have the same number of occurences.')
 

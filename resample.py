@@ -3,9 +3,6 @@
 import numpy as np
 import xarray as xr
 
-#package defined functions
-from . import process_data as data_proc
-
 def iaaft(x, fit_seasonal=False, rng=None):
     """Return a surrogate time series based on IAAFT.
 
@@ -164,12 +161,11 @@ def create_surrogate_modes(ortho_mode_df,
                            fit_seasonal,
                            mv_fit_seasonal,
                            n_ens_members,
-                           mode_path=None,
                            mode_list=None,
                            mv_mode_list=None,
                            max_iters=np.inf,
                            rng=None,
-                           save_path=None):
+                           save_dir=None):
     """Create modes that have been resampled through Iterative
     Adjusted Amplitude Fourier Transform (IAAFT). The modes
     will have the same Fourier amplitudes as the original time
@@ -177,10 +173,6 @@ def create_surrogate_modes(ortho_mode_df,
 
     Parameters
     ----------
-    mode_path : str
-        Path to the netCDF file where the climate modes are saved. See
-        process_climate_modes() for details.
-        
     mode_list: list of strings
         list of variable names for which to create surrogate modes.
         
@@ -204,7 +196,7 @@ def create_surrogate_modes(ortho_mode_df,
     rng : Numpy random Generator
         Like np.random.default_rng()
         
-    save_path : str
+    save_dir : str
         Path to the directory for saving the modes. Nothing is saved if set to None.
         
     Returns
@@ -215,19 +207,6 @@ def create_surrogate_modes(ortho_mode_df,
 
     if rng is None:
         rng = np.random.default_rng()
-
-    if (ortho_mode_df is None) and (mode_path is None):
-        raise ValueError('One of ortho_mode_df or mode_path must be supplied.')
-    
-    if ortho_mode_df is None:
-        # Load original modes
-        mode_df = xr.open_dataset(mode_path)
-        mode_df = mode_df.to_pandas()
-
-        ortho_mode_df = data_proc.orthogonalize_modes(mode_df, mode_list)
-        data_proc.check_mode(mode_df)
-    
-    #data_proc.check_ortho_mode(ortho_mode_df)
     
     total_mode_list = []
     
@@ -306,8 +285,8 @@ def create_surrogate_modes(ortho_mode_df,
                               coords={'ens_mem': np.arange(1, n_ens_members + 1),
                                       'time': time_indx})
 
-    if save_path is not None:
-        surrogate_ds.to_netcdf(save_path + 'surrogate_modes.nc')
+    if save_dir is not None:
+        surrogate_ds.to_netcdf(save_dir + 'surrogate_modes.nc')
 
     return surrogate_ds
 

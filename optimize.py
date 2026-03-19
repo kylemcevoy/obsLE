@@ -49,7 +49,7 @@ def optimize_transform(y,
                        lambda_values,
                        offset,
                        check_input=False,
-                       save_path=None):
+                       save_dir=None):
     """Perform optimization of Box-Cox parameters at each location using maximum
     likelihood over a grid of parameters. The profile likelihood approach is taken.
 
@@ -76,11 +76,11 @@ def optimize_transform(y,
         are positive. In most cases, we set offset to a small positive value 
         so that the transform is valid for data with some 0s. e.g. offset=1e-6.
 
-    save_path: str
+    save_dir: str
         path to the directory where the output of the optimization should be saved.
         The path should end in /, and the output will be saved at 
-        save_path + 'optim_transform_params.nc' and
-        save_path + 'optim_transform_loglik.nc'. If None, nothing will be saved.
+        save_dir + 'optim_transform_params.nc' and
+        save_dir + 'optim_transform_loglik.nc'. If None, nothing will be saved.
 
     Returns
     -------
@@ -187,8 +187,8 @@ def optimize_transform(y,
     AIC_penalty = 2 * (p + 1)
     optim_ds['AIC'] = AIC_penalty - 2 * optim_ds['loglik']
 
-    if save_path is not None:
-        param_da.to_netcdf(save_path + 'optim_transform_params.nc')
-        optim_ds.to_netcdf(save_path + 'optim_transform_loglik.nc')
+    if save_dir is not None:
+        param_da.to_netcdf(save_dir + 'optim_transform_params.nc')
+        optim_ds.to_netcdf(save_dir + 'optim_transform_loglik.nc')
         
     return param_da, optim_ds

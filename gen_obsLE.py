@@ -13,11 +13,12 @@ def build_obsLE(beta_ds,
                 block_size,
                 surrogate_modes,
                 var_name,
-                save_path,
+                save_dir,
                 transform=True,
                 lam=None,
                 offset=None,
                 forcing_df=None,
+                save_resid=False,
                 rng=None):
     """
     Build Observational Large Ensemble (Obs-LE) members from the fitted 
@@ -48,10 +49,10 @@ def build_obsLE(beta_ds,
     var_name: str
         Name of the input variable.
         
-    save_path : str
+    save_dir : str
         Path to the directory for saving the outputted ensemble members. Directory
         name should end in /. Members are saved in netCDF file format at:
-        save_path + 'obsLE_member{member #}.nc'.
+        save_dir + 'obsLE_member{member #}.nc'.
         
     transform: bool
         If True, the recombined fields are inverse Box-Cox transformed using the
@@ -118,6 +119,9 @@ def build_obsLE(beta_ds,
         bootstrap_residuals = resample.bootstrap_residuals(residuals_da,
                                                            block_size=block_size,
                                                            rng=rng)
+        if save_resid:
+            resid_savename = save_dir + f'boot_residuals_member{mem:04}.nc'
+            bootstrap_residuals.to_netcdf(resid_savename)
         
         surrogate_member = (surrogate_modes.sel(ens_mem=mem)
                 .drop_vars('ens_mem')
@@ -152,7 +156,7 @@ def build_obsLE(beta_ds,
         else:
             transf_attr = ('The synthetic-LE was created with no transform.')
 
-        descrip = ('synthetic {var_name} record generated via an'
+        descrip = (f'synthetic {var_name} record generated via an'
                    ' observational large ensemble')
         obsLE_member = obsLE_member.rename(var_name)
         obsLE_member = obsLE_member.assign_attrs(
@@ -162,27 +166,25 @@ def build_obsLE(beta_ds,
             transform=transf_attr
         )
         
-        member_savename = save_path + f'obsLE_member{mem:04}.nc'
+        member_savename = save_dir + f'obsLE_member{mem:04}.nc'
         obsLE_member.to_netcdf(member_savename)
 
 
 def obsLE_pipeline(n_ens_members,
                    y,
-                   start_year,
-                   end_year,
+                   mode_df,
                    mode_list,
                    mv_mode_list,
                    fit_seasonal,
                    mv_fit_seasonal,
                    block_size,
-                   save_path,
+                   save_dir,
                    transform=True,
                    lam=None,
                    offset=None,
                    rng=None,
-                   mode_df=None,
                    forcing_df=None,
-                   mode_path=None):
+                   save_resid=False):
     """Construct the Observational Large Ensemble (Obs-LE).
     
     Parameters
@@ -192,12 +194,6 @@ def obsLE_pipeline(n_ens_members,
 
     y, xr.DataArray, dims: (time, lat, lon)
         DataArray containing the target variable for building the Obs-LE.
-
-    start_year: str
-        First year to include in the Obs-LE. String with four digit year.
-
-    end_year: str
-        Last year to include in the Obs-LE. String with four digit year.
 
     mode_list: list of str
         list containing the names of the climate modes to be included in the
@@ -228,10 +224,10 @@ def obsLE_pipeline(n_ens_members,
         bootstrap. Must be divisible by 12, so that only whole years are 
         included.
 
-    save_path: str
+    save_dir: str
         Path to the directory in which to save the outputted Obs-LE members and 
         component files. Should end in /. Individual members are saved as 
-        netCDF files at: save_path + 'obsLE_member{member #}.nc'
+        netCDF files at: save_dir + 'obsLE_member{member #}.nc'
     
     transform: bool
         If True, the linear model is fit and the resampling is done in Box-Cox
@@ -241,42 +237,35 @@ def obsLE_pipeline(n_ens_members,
     lam: list of numeric
         List containing Box-Cox power paramters to optimize over for the
         transformation applied to y. Values for the transform are 
-        restricted to be positive. If transform=False, a list must be passed.
+        restricted to be positive. If transform=True, a list must be passed.
 
     offset: float64
         Value for shifting y before applying the Box-Cox transform. If there 
         are zeros in the data, offset should be a positive value such that 
         y + offset is positive everywhere. Selecting a small value such as 
-        1e-6 works well in practice. If transform=False, a value must be passed.
+        1e-6 works well in practice. If transform=True, a value must be passed.
         
     mode_df: pd.DataFrame
         DataFrame containing the climate modes as columns. The index should be 
         a pd.datetime64 index. Rows should contain monthly observations of the
         climate modes. If None, imports modes using 
         process_data.process_climate_modes().
-
-    mode_path: str
-        path to the climate modes
     """
 
     if rng is None:
         rng = np.random.default_rng()
-
-    if mode_df is None and mode_path is None:
-        raise ValueError('One of mode_df or mode_path must be specified')
     
     if y.name is not None:
         var_name = y.name
     else:
         var_name = 'var'
     
-    total_mode_list = mv_mode_list + mode_list
-    ortho_mode_df = data_proc.build_ortho_mode_df(mode_df=mode_df,
-                                                  start_year=start_year,
-                                                  end_year=end_year,
-                                                  mode_list=total_mode_list,
-                                                  save_path=save_path,
-                                                  mode_path=mode_path)
+    mode_df = data_proc.check_mode(mode_df)
+    
+    ortho_mode_df = data_proc.orthogonalize_modes(mode_df=mode_df,
+                                                  save_dir=save_dir)
+    
+    ortho_mode_df = data_proc.check_mode(ortho_mode_df)
 
     if forcing_df is not None:
         X = ortho_mode_df.merge(forcing_df, on='time')
@@ -288,13 +277,13 @@ def obsLE_pipeline(n_ens_members,
                                                X=X,
                                                lambda_values=lam,
                                                offset=offset,
-                                               save_path=save_path)
+                                               save_dir=save_dir)
 
         beta, lm_out = fit.fit_optimized_model(y=y,
                                                X=X,
                                                lam=param_da,
                                                offset=offset,
-                                               save_path=save_path)
+                                               save_dir=save_dir)
     else:
         beta, RSS, residuals, fitted_values = fit.fit_linear_models(y, X)
         
@@ -308,9 +297,12 @@ def obsLE_pipeline(n_ens_members,
                                           nan_mask=nan_mask,
                                           coords=y.coords)
         
-        if save_path is not None:
-            beta.to_netcdf(save_path + 'beta.nc')
-            lm_out.to_netcdf(save_path + 'regression_output.nc')
+        param_da = None
+        offset = None
+        
+        if save_dir is not None:
+            beta.to_netcdf(save_dir + 'beta.nc')
+            lm_out.to_netcdf(save_dir + 'regression_output.nc')
 
     residuals_da = lm_out['residuals']
 
@@ -321,7 +313,7 @@ def obsLE_pipeline(n_ens_members,
                                                       mv_fit_seasonal=mv_fit_seasonal,
                                                       n_ens_members=n_ens_members,
                                                       rng=rng,
-                                                      save_path=save_path)
+                                                      save_dir=save_dir)
 
     
     build_obsLE(beta_ds=beta,
@@ -334,4 +326,5 @@ def obsLE_pipeline(n_ens_members,
                 var_name=var_name,
                 transform=transform,
                 rng=rng,
-                save_path=save_path)
+                save_resid=save_resid,
+                save_dir=save_dir)
