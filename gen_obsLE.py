@@ -284,10 +284,14 @@ def obsLE_pipeline(n_ens_members,
                                                lam=param_da,
                                                offset=offset,
                                                save_dir=save_dir)
-    else:
-        beta, RSS, residuals, fitted_values = fit.fit_linear_models(y, X)
-        
+    else:    
         nan_mask = ~y.isnull().all(dim='time')
+
+        # this expects time to be the first dimension
+        matrix_y = y.values[:, nan_mask]
+        
+        beta, RSS, residuals, fitted_values = fit.fit_linear_models(y=matrix_y,
+                                                                    X=X)
         
         beta, lm_out = fit.build_model_ds(beta=beta,
                                           var_names=X.columns.to_list(),

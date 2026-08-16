@@ -98,6 +98,23 @@ def iaaft(x, fit_seasonal=False, rng=None):
     return x_new, iter_count
 
 def mv_iaaft(modes, fit_seasonal, rng):
+    """Return a surrogate time series based on IAAFT.
+
+    Parameters
+    ----------
+    modes : 2D numpy array
+        Array with individual modes as the columns of the array.
+    fit_seasonal : bool list
+        Modes corresponding to true will have monthly amplitudes rescaled to
+        match the observed variability. Generally should use True for ENSO,
+        PDO, and PNA.
+    rng : Numpy Random Generator as produced by np.random.default_rng().
+
+    Returns
+    -------
+    iaaft_modes : 2D numpy array
+        Array of surrogate time series. 
+    """
     mode1 = modes[:, 0]
     
     modes_array = modes[:, 1:]
@@ -173,6 +190,9 @@ def create_surrogate_modes(ortho_mode_df,
 
     Parameters
     ----------
+    ortho_mode_df: Pandas DataFrame
+        Dataframe containing the orthogonalized modes.
+        
     mode_list: list of strings
         list of variable names for which to create surrogate modes.
         
@@ -181,7 +201,7 @@ def create_surrogate_modes(ortho_mode_df,
         whether to scale the resulting time series to match the monthly
         cycle of standard deviations in the observed modes.
         
-    mv_fit_sesonal: list of bools
+    mv_fit_seasonal: list of bools
         Must match the length of mv_mode_list. True/False values give
         whether to scale the resulting time series to match the monthly
         cycle of standard deviations in the observed modes.
@@ -290,7 +310,9 @@ def create_surrogate_modes(ortho_mode_df,
 
     return surrogate_ds
 
-def bootstrap_residuals(residuals_da, block_size, rng=None):
+def bootstrap_residuals(residuals_da, 
+                        block_size,
+                        rng=None):
     """Perform moving block bootstrapping of the residuals. The blocks contain the 
     entire spatial field and a number of whole years of data, specified by 
     block_size.
@@ -339,7 +361,7 @@ def bootstrap_residuals(residuals_da, block_size, rng=None):
 
     boot_residuals = residuals_da.isel(time=bootstrap_indx)
     boot_residuals = boot_residuals.assign_coords({'time': residuals_da.time})
-
+    
     return boot_residuals
 
 

@@ -28,7 +28,7 @@ rng = np.random.default_rng(693974)
 proj_dir = '/home/data/projects/conus_precip_extremes/'
 
 ### Output directory -- (end with trailing slash)
-save_dir = proj_dir + 'synthLE/cesm2/full_ensemble/'
+save_dir = proj_dir + 'synthLE/test/'
 
 ### Climate Mode Parameters
 start_year = '1920'
@@ -64,7 +64,7 @@ cesm2_path = proj_dir + 'cesm2/cesm2_PRECT_processed.nc'
 cesm2 = xr.open_dataarray(cesm2_path)
 cesm2 = cesm2.rename('precip')
 
-for mem in np.arange(50):
+for mem in np.arange(2):
     print(f'member number: {mem}')
     
     save_dir = save_dir + f'mem{mem:02}/'
@@ -73,8 +73,8 @@ for mem in np.arange(50):
     cesm2_mem = (cesm2.sel(ens_mem=mem)
                  .squeeze(drop=True))
     
-    cvdp_mode_mem = (cvdp_modes.sel(ens_mem=mem)
-                     .squeeze(drop=True))
+    cvdp_mode_mem = cvdp_modes.sel(ens_mem=mem)
+    cvdp_mode_mem = cvdp_mode_mem.drop_vars('ens_mem')
     
     cvdp_mode_df = cvdp_mode_mem.to_dataframe()
     
@@ -82,8 +82,6 @@ for mem in np.arange(50):
                             y=cesm2_mem,
                             mode_df=cvdp_mode_df,
                             forcing_df=None,
-                            start_year=start_year,
-                            end_year=end_year,
                             mode_list=mode_list,
                             mv_mode_list=mv_mode_list,
                             lam=lambda_values,

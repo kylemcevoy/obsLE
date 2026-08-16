@@ -28,7 +28,7 @@ rng = np.random.default_rng(4743105)
 
 ### Output directory -- (end with trailing slash)
 proj_dir = '/home/data/projects/conus_precip_extremes/'
-save_dir = proj_dir + 'obsLE/gpcc_cvdp/'
+save_dir = proj_dir + 'obsLE/gpcc/'
 mode_path = proj_dir + 'climate_modes/'
 
 #using pre-processed gpcc otherwise comment this out and 
@@ -39,9 +39,7 @@ gpcc_mmday = xr.open_dataarray(gpcc_path)
 ### Climate Modes
 mode_df = xr.open_dataset(mode_path + 'cvdp_obs_modes.nc')
 mode_df = mode_df.to_dataframe()
-start_year = '1920'
-end_year = '2020'
-# setting (model_mode_list = None) uses all modes: ENSO, PDO, PNA, NAO.
+# mode_list contains the modes to use univariate iaaft on.
 mode_list = ['nao']
 # the modes that are calculated using multivariate iaaft
 mv_mode_list = ['enso', 'pdo', 'pna']
